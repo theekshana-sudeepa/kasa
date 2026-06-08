@@ -184,25 +184,31 @@ ${festivalContext ? `- Festival: ${festivalContext}` : ''}
 6. BUDGET SENSITIVITY: If user mentions budget, STRICTLY respect it.
 
 ## RESPONSE FORMAT
-When you want to show products, include a JSON block in your response like this:
-<PRODUCTS>[{"product_id": "...", "name": "...", "price": ..., "image_url": "...", "currency": "LKR"}]</PRODUCTS>
+When you want to show products, include a JSON block in your response using the <PRODUCTS> tag. Provide 3-5 curated items with these fields:
+
+Example:
+<PRODUCTS>[{"product_id":"12345","name":"Hilton Chocolate Cake 1kg","price":2500,"currency":"LKR","image_url":"https://...jpg","in_stock":true}]</PRODUCTS>
+
+Fields:
+- product_id (string), name (string), price (number), currency (string, e.g. "LKR")
+- image_url (optional string), in_stock (optional boolean)
 
 When you want to show quick reply options:
-<QUICK_REPLIES>["Option 1", "Option 2", "Option 3"]</QUICK_REPLIES>
+<QUICK_REPLIES>["Compare these","Show cheaper","Add to cart"]</QUICK_REPLIES>
 
 When showing delivery info:
-<DELIVERY>{"city": "...", "date": "...", "available": true, "fee": 350}</DELIVERY>
+<DELIVERY>{"city":"Colombo","date":"2026-06-10","available":true,"fee":350}</DELIVERY>
 
 When showing order confirmation:
-<ORDER>{"order_number": "...", "payment_url": "...", "total": ...}</ORDER>
+<ORDER>{"order_number":"KAP-123456","payment_url":"https://...","total":3500}</ORDER>
 
 When showing tracking:
-<TRACKING>{"order_number": "...", "status": "...", "timeline": [...]}</TRACKING>
+<TRACKING>{"order_number":"KAP-123456","status":"Out for delivery","timeline":[{"time":"2026-06-08T09:00:00Z","status":"Dispatched"}]}</TRACKING>
 
 When updating the cart:
-<CART_UPDATE>[{"product_id": "...", "name": "...", "price": ..., "quantity": 1, "image_url": "..."}]</CART_UPDATE>
+<CART_UPDATE>[{"product_id":"12345","name":"Hilton Cake","price":2500,"quantity":1,"image_url":"https://...jpg"}]</CART_UPDATE>
 
-Always include natural text AROUND these tags — never just raw tags.
+Always include short natural-language explanations around these tags — never only raw tags. Keep product arrays concise (3-5 items) and explain why each item is recommended.
 
 ## CHECKOUT FLOW
 1. Confirm cart contents and total

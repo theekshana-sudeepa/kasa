@@ -99,6 +99,44 @@ export default function Home() {
         timestamp: Date.now(),
       });
 
+        // Poll server parsed endpoint periodically to pick up MCP results or post-LLM tool execution
+        let parsedFound = false;
+        const pollInterval = 700;
+        const pollId = setInterval(async () => {
+          try {
+            const parsedRes = await fetch(`/api/chat/parsed?sessionId=${sessionId}`);
+            if (!parsedRes.ok) return;
+            const parsedJson = await parsedRes.json();
+            const parsedResponse = parsedJson.parsed;
+            if (parsedResponse && !parsedFound) {
+              parsedFound = true;
+              useChatStore.setState((state) => ({
+                messages: state.messages.map((m) =>
+                  m.id === assistantMsgId
+                    ? {
+                        ...m,
+                        content: parsedResponse.text || '',
+                        products: parsedResponse.products,
+                        quickReplies: parsedResponse.quickReplies,
+                        delivery: parsedResponse.delivery,
+                        order: parsedResponse.order,
+                        tracking: parsedResponse.tracking,
+                        comparison: parsedResponse.comparison,
+                      }
+                    : m
+                ),
+              }));
+
+              if (parsedResponse.cartUpdate && parsedResponse.cartUpdate.length > 0) {
+                setCart(parsedResponse.cartUpdate);
+              }
+              clearInterval(pollId as any);
+            }
+          } catch (err) {
+            // ignore transient errors
+          }
+        }, pollInterval);
+
       const decoder = new TextDecoder();
       let fullText = '';
 
@@ -133,6 +171,8 @@ export default function Home() {
           setCart(parsedResponse.cartUpdate);
         }
       }
+      // stop polling parsed endpoint when stream finished
+      try { clearInterval(pollId as any); } catch {}
     } catch (error) {
       console.error('Chat error:', error);
       addMessage({
@@ -174,6 +214,84 @@ export default function Home() {
     new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   const hasMessages = messages.length > 0;
+
+  const handleCheckoutFlow = async () => {
+    if (cart.length === 0) return;
+
+    try {
+      setLoading(true);
+
+      // Sync cart to server to compute total
+      const syncRes = await fetch('/api/cart/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cart }),
+      });
+      const syncJson = await syncRes.json();
+
+      // If delivery info missing, ask user
+      let city = deliveryCity;
+      let date = deliveryDate;
+      if (!city) city = window.prompt('Enter delivery city (for delivery check):') || '';
+      if (!date) date = window.prompt('Enter delivery date (YYYY-MM-DD):') || '';
+
+      // Check delivery for first product
+      const first = cart[0];
+      const checkRes = await fetch('/api/delivery/check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ city, date, product_id: first.product_id }),
+      });
+      const checkJson = await checkRes.json();
+
+      if (checkJson.result && checkJson.result.available === false) {
+        // Notify user via assistant message
+        addMessage({ id: `assistant-${Date.now()}`, role: 'assistant', content: `Delivery unavailable to ${city} on ${date} for ${first.name}. Please choose another date or city.`, timestamp: Date.now(), });
+        return;
+      }
+
+      // Collect recipient details
+      const recipient_name = window.prompt('Recipient name:') || 'Recipient';
+      const recipient_phone = window.prompt('Recipient phone:') || '0770000000';
+      const recipient_address = window.prompt('Recipient address:') || 'Address';
+      const sender_name = window.prompt('Your name:') || 'Sender';
+      const sender_email = window.prompt('Your email:') || 'sender@example.com';
+      const gift_message = window.prompt('Gift message (optional):') || '';
+
+      // Create order
+      const orderRes = await fetch('/api/order/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          items: cart.map((c) => ({ product_id: c.product_id, quantity: c.quantity })),
+          delivery_city: city,
+          delivery_date: date,
+          recipient_name,
+          recipient_phone,
+          recipient_address,
+          sender_name,
+          sender_email,
+          gift_message,
+        }),
+      });
+
+      const orderJson = await orderRes.json();
+
+      if (orderJson.result) {
+        const orderText = `Order created: ${JSON.stringify(orderJson.result)}`;
+        addMessage({ id: `assistant-${Date.now()}`, role: 'assistant', content: orderText, timestamp: Date.now(), });
+        // Clear cart locally
+        setCart([]);
+      } else {
+        addMessage({ id: `assistant-${Date.now()}`, role: 'assistant', content: `Order failed: ${orderJson.error || 'unknown'}`, timestamp: Date.now(), });
+      }
+    } catch (err) {
+      console.error('Checkout error', err);
+      addMessage({ id: `assistant-${Date.now()}`, role: 'assistant', content: 'Checkout failed — please try again later.', timestamp: Date.now(), });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="app-container">
@@ -305,7 +423,7 @@ export default function Home() {
       <CartDrawer
         isOpen={cartDrawerOpen}
         onClose={() => setCartDrawerOpen(false)}
-        onCheckout={() => { setCartDrawerOpen(false); sendMessage("Let's proceed to checkout"); }}
+        onCheckout={() => { setCartDrawerOpen(false); handleCheckoutFlow(); }}
       />
     </div>
   );

@@ -1,20 +1,57 @@
+import { z } from 'zod';
 import type {
-  Product,
-  DeliveryInfo,
-  OrderResult,
-  TrackingInfo,
-  CartItem,
+  Product as MCPProduct,
+  DeliveryInfo as MCPDelivery,
+  OrderResult as MCPOrder,
+  TrackingInfo as MCPTracking,
+  CartItem as MCPCartItem,
 } from '../mcp/types';
+
+const ProductSchema = z.object({
+  product_id: z.string(),
+  name: z.string(),
+  price: z.number(),
+  image_url: z.string().optional(),
+  currency: z.string().optional(),
+  in_stock: z.boolean().optional(),
+});
+
+const DeliverySchema = z.object({
+  city: z.string(),
+  date: z.string().optional(),
+  available: z.boolean(),
+  fee: z.number().optional(),
+});
+
+const OrderSchema = z.object({
+  order_number: z.string(),
+  payment_url: z.string().url(),
+  total: z.number(),
+});
+
+const TrackingSchema = z.object({
+  order_number: z.string(),
+  status: z.string(),
+  timeline: z.array(z.any()).optional(),
+});
+
+const CartItemSchema = z.object({
+  product_id: z.string(),
+  name: z.string(),
+  price: z.number(),
+  quantity: z.number(),
+  image_url: z.string().optional(),
+});
 
 export interface ParsedResponse {
   text: string;
-  products?: Product[];
+  products?: MCPProduct[];
   quickReplies?: string[];
-  delivery?: DeliveryInfo;
-  order?: OrderResult;
-  tracking?: TrackingInfo;
-  cartUpdate?: CartItem[];
-  comparison?: Product[];
+  delivery?: MCPDelivery;
+  order?: MCPOrder;
+  tracking?: MCPTracking;
+  cartUpdate?: MCPCartItem[];
+  comparison?: MCPProduct[];
 }
 
 /**
@@ -91,32 +128,50 @@ export function parseAssistantResponse(rawText: string): ParsedResponse {
 
   const result: ParsedResponse = { text };
 
-  if (productsResult.data && productsResult.data.length > 0) {
-    result.products = productsResult.data;
-    // If more than 2 products returned, also populate comparison for UI
-    if (productsResult.data.length > 2) {
-      result.comparison = productsResult.data;
+  // Validate and assign products
+  if (productsResult.data && Array.isArray(productsResult.data)) {
+    const ok: MCPProduct[] = [];
+    for (const p of productsResult.data) {
+      const parsed = ProductSchema.safeParse(p);
+      if (parsed.success) ok.push(parsed.data as MCPProduct);
+      else console.warn('[KASA Parse] Invalid product schema', parsed.error.format());
+    }
+    if (ok.length > 0) {
+      result.products = ok;
+      if (ok.length > 2) result.comparison = ok;
     }
   }
 
-  if (quickRepliesResult.data && quickRepliesResult.data.length > 0) {
-    result.quickReplies = quickRepliesResult.data;
+  if (quickRepliesResult.data && Array.isArray(quickRepliesResult.data)) {
+    result.quickReplies = quickRepliesResult.data.filter((r) => typeof r === 'string');
   }
 
   if (deliveryResult.data) {
-    result.delivery = deliveryResult.data;
+    const parsed = DeliverySchema.safeParse(deliveryResult.data);
+    if (parsed.success) result.delivery = parsed.data as MCPDelivery;
+    else console.warn('[KASA Parse] Invalid delivery schema', parsed.error.format());
   }
 
   if (orderResult.data) {
-    result.order = orderResult.data;
+    const parsed = OrderSchema.safeParse(orderResult.data);
+    if (parsed.success) result.order = parsed.data as MCPOrder;
+    else console.warn('[KASA Parse] Invalid order schema', parsed.error.format());
   }
 
   if (trackingResult.data) {
-    result.tracking = trackingResult.data;
+    const parsed = TrackingSchema.safeParse(trackingResult.data);
+    if (parsed.success) result.tracking = parsed.data as MCPTracking;
+    else console.warn('[KASA Parse] Invalid tracking schema', parsed.error.format());
   }
 
-  if (cartUpdateResult.data && cartUpdateResult.data.length > 0) {
-    result.cartUpdate = cartUpdateResult.data;
+  if (cartUpdateResult.data && Array.isArray(cartUpdateResult.data)) {
+    const ok: MCPCartItem[] = [];
+    for (const c of cartUpdateResult.data) {
+      const parsed = CartItemSchema.safeParse(c);
+      if (parsed.success) ok.push(parsed.data as MCPCartItem);
+      else console.warn('[KASA Parse] Invalid cart item schema', parsed.error.format());
+    }
+    if (ok.length > 0) result.cartUpdate = ok;
   }
 
   return result;
