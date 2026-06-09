@@ -17,7 +17,7 @@ export default function ProductCarousel({ products, onAddToCart, onViewDetails }
       <div className="product-carousel">
         {products.map((product, index) => (
           <div
-            key={product.product_id}
+            key={`${product.product_id}-${index}`}
             style={{ animationDelay: `${index * 80}ms` }}
           >
             <ProductCard

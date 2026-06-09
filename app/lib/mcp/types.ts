@@ -58,6 +58,8 @@ export interface City {
 export interface Category {
   name: string;
   url: string;
+  slug?: string;
+  emoji?: string;
 }
 
 export interface MCPToolResult {
@@ -88,4 +90,5 @@ export interface ChatMessage {
   comparison?: Product[];
   quickReplies?: string[];
   cartUpdate?: CartItem[];
+  categories?: Category[];
 }

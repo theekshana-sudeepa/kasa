@@ -5,11 +5,23 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "**.kapruka.com",
+        hostname: "www.kapruka.com",
       },
       {
         protocol: "https",
         hostname: "kapruka.com",
+      },
+      {
+        protocol: "https",
+        hostname: "partnercentral.kapruka.com",
+      },
+      {
+        protocol: "https",
+        hostname: "placehold.co",
+      },
+      {
+        protocol: "https",
+        hostname: "via.placeholder.com",
       },
     ],
   },

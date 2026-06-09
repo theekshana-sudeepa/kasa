@@ -26,6 +26,7 @@ export class KaprukaMCPClient {
   private sessionId: string | null = null;
   private requestCounter = 0;
   private initialized = false;
+  private initializing: Promise<void> | null = null;
 
   private nextId(): number {
     return ++this.requestCounter;
@@ -51,7 +52,6 @@ export class KaprukaMCPClient {
           body: JSON.stringify(body),
         });
 
-        // Rate limited — back off and retry
         if (response.status === 429) {
           const retryAfter = response.headers.get('Retry-After');
           const delayMs = retryAfter
@@ -63,29 +63,25 @@ export class KaprukaMCPClient {
 
         if (!response.ok) {
           const errorText = await response.text().catch(() => 'Unknown error');
-          throw new Error(
-            `MCP request failed (${response.status}): ${errorText}`
-          );
+          throw new Error(`MCP request failed (${response.status}): ${errorText}`);
         }
 
-        // Capture session ID from initialization response
-        const mcpSessionId = response.headers.get('Mcp-Session-Id');
+        // Capture session ID
+        const mcpSessionId = response.headers.get('mcp-session-id');
         if (mcpSessionId) {
           this.sessionId = mcpSessionId;
         }
 
-        // Handle SSE / streaming responses — accumulate events
+        // Handle SSE responses
         const contentType = response.headers.get('Content-Type') || '';
         if (contentType.includes('text/event-stream')) {
           return await this.parseSSEResponse(response);
         }
 
-        const json = (await response.json()) as JSONRPCResponse;
-        return json;
+        return (await response.json()) as JSONRPCResponse;
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
 
-        // Don't retry on non-retriable errors
         if (
           lastError.message.includes('400') ||
           lastError.message.includes('401') ||
@@ -110,8 +106,9 @@ export class KaprukaMCPClient {
     let lastData: string | null = null;
 
     for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        lastData = line.slice(6).trim();
+      const trimmed = line.trim();
+      if (trimmed.startsWith('data:')) {
+        lastData = trimmed.slice(5).trim();
       }
     }
 
@@ -119,7 +116,6 @@ export class KaprukaMCPClient {
       try {
         return JSON.parse(lastData) as JSONRPCResponse;
       } catch {
-        // If the accumulated data isn't valid JSON, wrap it
         return {
           jsonrpc: '2.0',
           id: 0,
@@ -140,29 +136,39 @@ export class KaprukaMCPClient {
   async initialize(): Promise<void> {
     if (this.initialized) return;
 
-    const request: JSONRPCRequest = {
-      jsonrpc: '2.0',
-      id: this.nextId(),
-      method: 'initialize',
-      params: {
-        protocolVersion: '2025-03-26',
-        capabilities: {},
-        clientInfo: {
-          name: 'kasa',
-          version: '1.0.0',
-        },
-      },
-    };
-
-    const response = await this.sendRequest(request);
-
-    if (response.error) {
-      throw new Error(
-        `MCP initialization failed: ${response.error.message}`
-      );
+    // Prevent concurrent initialization
+    if (this.initializing) {
+      return this.initializing;
     }
 
-    this.initialized = true;
+    this.initializing = (async () => {
+      const request: JSONRPCRequest = {
+        jsonrpc: '2.0',
+        id: this.nextId(),
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-03-26',
+          capabilities: {},
+          clientInfo: {
+            name: 'kasa',
+            version: '1.0.0',
+          },
+        },
+      };
+
+      const response = await this.sendRequest(request);
+
+      if (response.error) {
+        this.initializing = null;
+        throw new Error(`MCP initialization failed: ${response.error.message}`);
+      }
+
+      this.initialized = true;
+      this.initializing = null;
+      console.log('[KASA MCP] Initialized successfully, session:', this.sessionId);
+    })();
+
+    return this.initializing;
   }
 
   async callTool(
@@ -171,29 +177,30 @@ export class KaprukaMCPClient {
   ): Promise<MCPToolResult> {
     await this.initialize();
 
+    // CRITICAL: MCP server expects arguments wrapped in { params: { ... } }
     const request: JSONRPCRequest = {
       jsonrpc: '2.0',
       id: this.nextId(),
       method: 'tools/call',
       params: {
         name,
-        arguments: args,
+        arguments: {
+          params: args,
+        },
       },
     };
+
+    console.log(`[KASA MCP] Calling tool: ${name}`, JSON.stringify(args));
 
     const response = await this.sendRequest(request);
 
     if (response.error) {
+      console.error(`[KASA MCP] Tool error:`, response.error);
       return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              error: true,
-              message: response.error.message,
-            }),
-          },
-        ],
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ error: true, message: response.error.message }),
+        }],
         isError: true,
       };
     }
@@ -202,23 +209,18 @@ export class KaprukaMCPClient {
 
     if (!result || !result.content) {
       return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ error: true, message: 'Empty response from MCP' }),
-          },
-        ],
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ error: true, message: 'Empty MCP response' }),
+        }],
         isError: true,
       };
     }
 
+    console.log(`[KASA MCP] Tool ${name} returned ${result.content.length} content blocks`);
     return result;
   }
 
-  /**
-   * Parse the text content of an MCP tool result into a typed object.
-   * Falls back to raw text if JSON parsing fails.
-   */
   parseResult<T>(result: MCPToolResult): T {
     const textContent = result.content.find((c) => c.type === 'text');
     if (!textContent) {
@@ -228,6 +230,7 @@ export class KaprukaMCPClient {
     try {
       return JSON.parse(textContent.text) as T;
     } catch {
+      // MCP returns markdown, not JSON — return the raw text
       return textContent.text as unknown as T;
     }
   }
@@ -250,16 +253,14 @@ export class KaprukaMCPClient {
       ...(params.max_price !== undefined && { max_price: params.max_price }),
       ...(params.currency && { currency: params.currency }),
       in_stock_only: params.in_stock_only ?? true,
-      limit: params.limit ?? 10,
+      limit: params.limit ?? 5,
     });
   }
 
-  async getProduct(
-    productId: string,
-    currency?: string
-  ): Promise<MCPToolResult> {
+  async getProduct(productId: string, currency?: string): Promise<MCPToolResult> {
     return this.callTool('kapruka_get_product', {
       product_id: productId,
+      response_format: 'json',
       ...(currency && { currency }),
     });
   }
@@ -269,16 +270,10 @@ export class KaprukaMCPClient {
   }
 
   async listDeliveryCities(query: string): Promise<MCPToolResult> {
-    return this.callTool('kapruka_list_delivery_cities', {
-      query,
-    });
+    return this.callTool('kapruka_list_delivery_cities', { query });
   }
 
-  async checkDelivery(
-    city: string,
-    date: string,
-    productId: string
-  ): Promise<MCPToolResult> {
+  async checkDelivery(city: string, date: string, productId: string): Promise<MCPToolResult> {
     return this.callTool('kapruka_check_delivery', {
       city,
       date,
@@ -307,8 +302,7 @@ export class KaprukaMCPClient {
   }
 }
 
-// ── Singleton instance ──────────────────────────────────────────────────
-
+// ── Singleton ──────────────────────────────────────────────────
 let clientInstance: KaprukaMCPClient | null = null;
 
 export function getMCPClient(): KaprukaMCPClient {

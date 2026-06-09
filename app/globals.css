@@ -1314,3 +1314,44 @@ input, textarea {
     display: none;
   }
 }
+
+/* Category Grid */
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.category-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 12px;
+  background: var(--kasa-bg);
+  border: 1px solid var(--kasa-border);
+  border-radius: var(--kasa-radius-md);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  text-align: center;
+}
+
+.category-card:hover {
+  background: var(--kasa-surface);
+  transform: translateY(-2px);
+  border-color: var(--kasa-primary);
+  box-shadow: 0 4px 12px rgba(108, 92, 231, 0.1);
+}
+
+.category-card-emoji {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.category-card-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--kasa-text-1);
+  line-height: 1.2;
+}
