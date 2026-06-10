@@ -193,6 +193,9 @@ Fields:
 - product_id (string), name (string), price (number), currency (string, e.g. "LKR")
 - image_url (optional string), in_stock (optional boolean)
 
+When the user explicitly asks to COMPARE products, use the <COMPARISON> tag instead of <PRODUCTS>. This will render a side-by-side comparison table.
+<COMPARISON>[{"product_id":"12345","name":"Hilton Cake","price":2500,"currency":"LKR","image_url":"https://...jpg","in_stock":true}]</COMPARISON>
+
 When you want to show quick reply options:
 <QUICK_REPLIES>["Compare these","Show cheaper","Add to cart"]</QUICK_REPLIES>
 
@@ -207,6 +210,9 @@ When showing tracking:
 
 When updating the cart:
 <CART_UPDATE>[{"product_id":"12345","name":"Hilton Cake","price":2500,"quantity":1,"image_url":"https://...jpg"}]</CART_UPDATE>
+
+When showing an inline cart summary to the user:
+<CART_SUMMARY/>
 
 Always include short natural-language explanations around these tags — never only raw tags. Keep product arrays concise (3-5 items) and explain why each item is recommended.
 

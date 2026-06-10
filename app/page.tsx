@@ -4,6 +4,9 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useChatStore } from './lib/store/chat-store';
 import Header from './components/Header';
 import WelcomeScreen from './components/WelcomeScreen';
+import CheckoutForm from './components/CheckoutForm';
+import ComparisonTable from './components/ComparisonTable';
+import CartSummary from './components/CartSummary';
 import TypingIndicator from './components/TypingIndicator';
 import ProductCarousel from './components/ProductCarousel';
 import QuickReplies from './components/QuickReplies';
@@ -129,6 +132,7 @@ export default function Home() {
                   tracking: parsedResponse.tracking,
                   comparison: parsedResponse.comparison,
                   categories: parsedResponse.categories,
+                  checkoutForm: parsedResponse.checkoutForm,
                 }
               : m
           ),
@@ -239,16 +243,35 @@ export default function Home() {
                   </div>
 
                   {msg.products && msg.products.length > 0 && (
-                    <ProductCarousel
-                      products={msg.products}
-                      onAddToCart={handleAddToCart}
-                      onViewDetails={handleViewDetails}
+                    <ProductCarousel 
+                      products={msg.products} 
                     />
+                  )}
+
+                  {msg.comparison && msg.comparison.length > 0 && (
+                    <div style={{ paddingLeft: '42px', paddingRight: '16px' }}>
+                      <ComparisonTable products={msg.comparison} />
+                    </div>
                   )}
 
                   {msg.delivery && (
                     <div style={{ paddingLeft: '42px' }}>
                       <DeliveryCard delivery={msg.delivery} />
+                    </div>
+                  )}
+
+                  {msg.showCartSummary && (
+                    <div style={{ paddingLeft: '42px', paddingRight: '16px' }}>
+                      <CartSummary />
+                    </div>
+                  )}
+
+                  {msg.checkoutForm && (
+                    <div style={{ paddingLeft: '42px', paddingRight: '42px' }}>
+                      <CheckoutForm onSubmit={(details) => {
+                        const { name, phone, address, senderName, senderEmail } = details;
+                        sendMessage(`Deliver to ${name}, ${phone}, ${address} | Sender: ${senderName}, ${senderEmail}`);
+                      }} />
                     </div>
                   )}
 

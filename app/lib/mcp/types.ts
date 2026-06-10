@@ -91,4 +91,6 @@ export interface ChatMessage {
   quickReplies?: string[];
   cartUpdate?: CartItem[];
   categories?: Category[];
+  checkoutForm?: boolean;
+  showCartSummary?: boolean;
 }

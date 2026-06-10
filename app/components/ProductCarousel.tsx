@@ -5,11 +5,9 @@ import ProductCard from './ProductCard';
 
 interface ProductCarouselProps {
   products: Product[];
-  onAddToCart: (product: Product) => void;
-  onViewDetails: (product: Product) => void;
 }
 
-export default function ProductCarousel({ products, onAddToCart, onViewDetails }: ProductCarouselProps) {
+export default function ProductCarousel({ products }: ProductCarouselProps) {
   if (!products || products.length === 0) return null;
 
   return (
@@ -22,8 +20,6 @@ export default function ProductCarousel({ products, onAddToCart, onViewDetails }
           >
             <ProductCard
               product={product}
-              onAddToCart={() => onAddToCart(product)}
-              onViewDetails={() => onViewDetails(product)}
             />
           </div>
         ))}

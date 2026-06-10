@@ -5,6 +5,7 @@ import type { CartItem, Language } from '@/app/lib/mcp/types';
 
 type Message = { role: 'user' | 'assistant' | 'system'; content: string };
 const conversations = new Map<string, Message[]>();
+const fallbackMemory = new Map<string, Record<string, any>>();
 const MAX_HISTORY = 30;
 
 interface ChatRequestBody {
@@ -124,11 +125,16 @@ async function parseProductsFromMarkdown(markdown: string): Promise<string> {
 }
 
 // Smart fallback response when no AI key is available
-async function generateFallbackResponse(message: string, cart: any[] = []): Promise<string> {
+async function generateFallbackResponse(sessionId: string, message: string, cart: any[] = []): Promise<string> {
   const mcpClient = getMCPClient();
   const lower = message.toLowerCase();
   let response = '';
   let productsTag = '';
+  let urgencyPrefix = '';
+  
+  if (lower.match(/\b(urgent|asap|today|emergency|fast|quick)\b/i)) {
+    urgencyPrefix = `⚠️ **Urgency Detected:** I see you need this fast! I'll prioritize same-day delivery options available in Colombo & Suburbs.\n\n`;
+  }
 
   try {
     // CHECKOUT INTENT
@@ -162,15 +168,59 @@ async function generateFallbackResponse(message: string, cart: any[] = []): Prom
         console.error('Delivery check error', e);
       }
       
-      response = `${deliveryMsg}\n\nAlmost done! I just need the recipient's details to deliver the items.\n\nPlease type: **Deliver to [Name], [Phone], [Address]**`;
-      response += `\n\n<QUICK_REPLIES>["Deliver to John Doe, 0771234567, 123 Main St, Colombo"]</QUICK_REPLIES>`;
+      fallbackMemory.set(sessionId, { ...(fallbackMemory.get(sessionId) || {}), deliveryDate: date });
+
+      response = `${deliveryMsg}\n\nAlmost done! I just need the recipient's details to deliver the items. Please fill out the secure form below:`;
+      response += `\n\n<CHECKOUT_FORM/>`;
+    }
+    // RE-ENTER DETAILS
+    else if (lower.match(/re-enter details|reenter|change details|wrong details|no, let me/i)) {
+      response = `No problem! Let's try that again. ✏️\n\nPlease fill out the delivery details below:`;
+      response += `\n\n<CHECKOUT_FORM/>`;
     }
     // RECIPIENT DETAILS RESPONSE
-    else if (lower.match(/deliver to/i) && lower.includes(',')) {
-      const parts = message.replace(/deliver to/i, '').split(',').map(s => s.trim());
-      const name = parts[0] || 'Unknown';
-      const phone = parts[1] || 'Unknown';
-      const address = parts.slice(2).join(', ') || 'Unknown';
+    else if (cart.length > 0 && (lower.match(/deliver to/i) || (message.includes(',') && /[0-9]{9,}/.test(message.replace(/\s|-/g, ''))))) {
+      let detailsStr = message.replace(/deliver to/i, '').trim();
+      let senderName = 'Unknown';
+      let senderEmail = 'Unknown';
+      
+      if (detailsStr.includes('| Sender:')) {
+        const [recip, sender] = detailsStr.split('| Sender:');
+        detailsStr = recip.trim();
+        const sParts = sender.split(',').map(s => s.trim());
+        senderName = sParts[0] || 'Unknown';
+        senderEmail = sParts[1] || 'Unknown';
+      }
+
+      // Remove prefixes like "Name:", "Phone:" if user typed them
+      detailsStr = detailsStr.replace(/name:|phone:|address:|to:/gi, '');
+      const parts = detailsStr.split(',').map(s => s.trim());
+      
+      let name = 'Unknown';
+      let phone = 'Unknown';
+      let address = 'Unknown';
+
+      // Simple heuristic: Phone is the part with 9+ digits
+      const phoneIndex = parts.findIndex(p => /[0-9]{9,}/.test(p.replace(/\s|-/g, '')));
+      
+      if (phoneIndex !== -1) {
+        phone = parts[phoneIndex];
+        name = phoneIndex > 0 ? parts[phoneIndex - 1] : parts[0];
+        address = parts.slice(phoneIndex + 1).join(', ') || parts.filter((_, i) => i !== phoneIndex && i !== (phoneIndex > 0 ? phoneIndex - 1 : 0)).join(', ');
+      } else {
+        name = parts[0] || 'Unknown';
+        phone = parts[1] || 'Unknown';
+        address = parts.slice(2).join(', ') || 'Unknown';
+      }
+
+      fallbackMemory.set(sessionId, {
+        ...(fallbackMemory.get(sessionId) || {}),
+        recipientName: name,
+        recipientPhone: phone,
+        recipientAddress: address,
+        senderName,
+        senderEmail
+      });
 
       response = `Great, I've noted the delivery details:\n\n👤 **Name:** ${name}\n📞 **Phone:** ${phone}\n📬 **Address:** ${address}\n\nIs this correct? If yes, how would you like to pay?`;
       response += `\n\n<QUICK_REPLIES>["Credit/Debit Card", "Cash on Delivery", "Bank Transfer", "No, let me re-enter details"]</QUICK_REPLIES>`;
@@ -182,31 +232,59 @@ async function generateFallbackResponse(message: string, cart: any[] = []): Prom
     }
     // CONFIRM ORDER RESPONSE
     else if (lower.match(/confirm order|pay now/i)) {
-      // Create a mock order using the MCP client structure
-      const order = {
-        order_number: "KAP" + Math.floor(Math.random() * 1000000),
-        payment_url: "https://www.kapruka.com/payment/mock",
-        total: cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
-        currency: "LKR"
-      };
+      const mem = fallbackMemory.get(sessionId) || {};
+      const items = cart.map(c => `${c.product_id}:${c.quantity}`).join(',');
       
-      response = `🎉 **Order Created Successfully!**\n\nYour order number is **${order.order_number}**. Please click the secure link below to complete your payment. Once paid, we'll start preparing your items for delivery! 🚀`;
-      response += `\n\n<ORDER>${JSON.stringify(order)}</ORDER>\n\n<CART_UPDATE>[]</CART_UPDATE>`;
+      try {
+        const orderRes = await mcpClient.callTool('kapruka_create_order', {
+          items,
+          delivery_city: mem.deliveryCity || 'Colombo',
+          delivery_date: mem.deliveryDate || new Date(Date.now() + 86400000).toISOString().split('T')[0],
+          recipient_name: mem.recipientName || 'Test User',
+          recipient_phone: mem.recipientPhone || '0771234567',
+          recipient_address: mem.recipientAddress || '123 Test St',
+          sender_name: mem.senderName || 'Test Sender',
+          sender_email: mem.senderEmail || 'test@test.com'
+        });
+        
+        const rawRes = mcpClient.parseResult<string>(orderRes);
+        const orderMatch = rawRes.match(/Order Number: \*\*(.*?)\*\*/);
+        const urlMatch = rawRes.match(/Payment Link: \*\*(.*?)\*\*/);
+        
+        if (orderMatch && urlMatch) {
+          const order = {
+            order_number: orderMatch[1],
+            payment_url: urlMatch[1],
+            total: cart.reduce((sum, item) => sum + item.price * item.quantity, 0),
+            currency: "LKR"
+          };
+          
+          response = `🎉 **Order Created Successfully!**\n\nYour order number is **${order.order_number}**. Please click the secure link below to complete your payment. Once paid, we'll start preparing your items for delivery! 🚀`;
+          response += `\n\n<ORDER>${JSON.stringify(order)}</ORDER>\n\n<CART_UPDATE>[]</CART_UPDATE>`;
+        } else {
+          throw new Error('Failed to parse order from MCP');
+        }
+      } catch (err) {
+        console.error('Failed to create order', err);
+        response = `Oops, something went wrong creating your order. Please try again! ⚠️\n\n<QUICK_REPLIES>["Confirm Order", "Cancel"]</QUICK_REPLIES>`;
+      }
     }
     // DYNAMIC CITY CHECK (Checkout mode only)
-    else if (cart.length > 0 && message.split(' ').length <= 3 && !lower.includes('show') && !lower.includes('find') && !lower.includes('search')) {
+    else if (cart.length > 0 && message.length > 2 && message.split(' ').length <= 3 && !lower.includes('show') && !lower.includes('find') && !lower.includes('search')) {
       const cityResult = await mcpClient.listDeliveryCities(message.trim());
       const cityText = mcpClient.parseResult<string>(cityResult);
       if (cityText.includes('- **')) {
         const cityMatch = cityText.match(/- \*\*([^*]+)\*\*/);
         const matchedCityName = cityMatch ? cityMatch[1] : message.trim();
+        
+        fallbackMemory.set(sessionId, { ...(fallbackMemory.get(sessionId) || {}), deliveryCity: matchedCityName });
+        
         response = `✅ Delivery to **${matchedCityName}** — great!\n\nNow, what **date** do you need it delivered? (e.g., 2026-06-15)\n\nOr I can check what's available:`;
         response += `\n\n<QUICK_REPLIES>["Tomorrow", "This weekend", "2026-06-15", "As soon as possible"]</QUICK_REPLIES>`;
       }
     }
 
     if (!response) {
-      // Search intent
       const searchTerms = [
         'show me', 'find', 'search', 'looking for', 'want', 'need',
         'gift', 'buy', 'cake', 'flower', 'chocolate', 'electronic',
@@ -214,8 +292,20 @@ async function generateFallbackResponse(message: string, cart: any[] = []): Prom
         'phone', 'wine', 'hamper', 'fruit', 'baby', 'jewelry', 'perfume',
         'sweet', 'clothing', 'book', 'surprise',
       ];
-      
-      if (searchTerms.some(term => lower.includes(term))) {
+
+      // SURPRISE ME INTENT
+      if (lower.match(/surprise me|random gift/i)) {
+        const categories = ['cake', 'electronic', 'flower', 'chocolate'];
+        const randomCat = categories[Math.floor(Math.random() * categories.length)];
+        const result = await mcpClient.searchProducts({ query: randomCat, in_stock_only: true, limit: 3 });
+        const text = mcpClient.parseResult<string>(result);
+        productsTag = await parseProductsFromMarkdown(text);
+        
+        response = `🎁 **Surprise!** I've pulled some completely random, premium wildcard items for you. How about one of these?\n\n${productsTag}`;
+        response += `\n\n<QUICK_REPLIES>["Surprise me again!", "Show me cakes instead", "Browse categories"]</QUICK_REPLIES>`;
+      }
+      // Search intent
+      else if (searchTerms.some(term => lower.includes(term))) {
         let query = message
           .replace(/^(show me|find me|search for|i want|i need|looking for|can you find|get me|i'm looking for|i am looking for)\s*/i, '')
           .replace(/\s*(please|thanks|thank you|pls)$/i, '')
@@ -234,6 +324,7 @@ async function generateFallbackResponse(message: string, cart: any[] = []): Prom
           response = `I searched for "${query}" but couldn't find exact matches right now. Let me suggest some alternatives! 🔍\n\n<QUICK_REPLIES>["Show me birthday gifts", "Browse categories", "Show me flowers", "Show me chocolates"]</QUICK_REPLIES>`;
         }
       }
+      
       // Categories
       else if (lower.includes('categor') || lower.includes('browse') || lower.includes('what do you have') || lower.includes('what can')) {
         const result = await mcpClient.listCategories();
@@ -286,7 +377,7 @@ async function generateFallbackResponse(message: string, cart: any[] = []): Prom
     response = `I'm having a moment connecting to the shop. Let me try again! 🔄\n\n<QUICK_REPLIES>["Try again", "Browse categories", "Show me gifts"]</QUICK_REPLIES>`;
   }
 
-  return response;
+  return urgencyPrefix + response;
 }
 
 // Execute MCP tools for AI context
@@ -393,17 +484,15 @@ export async function POST(request: Request) {
 
     // Smart fallback — works without any AI key!
     console.log('[KASA] Using smart fallback (no AI key)');
-    const fallbackResponse = await generateFallbackResponse(message, cart);
+    const fallbackResponse = await generateFallbackResponse(sessionId, message, cart);
 
     // Stream the fallback response character by character for realistic feel
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {
-        const words = fallbackResponse.split(/(\s+)/);
-        for (const word of words) {
-          controller.enqueue(encoder.encode(word));
-          // Small delay between words for streaming effect
-          await new Promise(r => setTimeout(r, 20));
+        for (let i = 0; i < fallbackResponse.length; i++) {
+          controller.enqueue(encoder.encode(fallbackResponse[i]));
+          await new Promise((resolve) => setTimeout(resolve, 5));
         }
         controller.close();
       },

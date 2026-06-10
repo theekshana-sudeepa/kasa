@@ -17,6 +17,8 @@ export interface ParsedResponse {
   cartUpdate?: CartItem[];
   comparison?: Product[];
   categories?: Category[];
+  checkoutForm?: boolean;
+  showCartSummary?: boolean;
 }
 
 function safeParse<T>(raw: string): T | null {
@@ -42,8 +44,12 @@ function extractTag<T>(
 
   const contentStart = startIdx + openTag.length;
   const endIdx = text.indexOf(closeTag, contentStart);
+  
   if (endIdx === -1) {
-    return { data: null, cleaned: text };
+    // Tag is open but not closed yet (streaming).
+    // Hide the incomplete tag and its contents from the cleaned text.
+    const cleaned = text.slice(0, startIdx).trim();
+    return { data: null, cleaned };
   }
 
   const rawContent = text.slice(contentStart, endIdx).trim();
@@ -58,6 +64,9 @@ export function parseAssistantResponse(rawText: string): ParsedResponse {
 
   const productsResult = extractTag<Product[]>(text, 'PRODUCTS');
   text = productsResult.cleaned;
+
+  const comparisonResult = extractTag<Product[]>(text, 'COMPARISON');
+  text = comparisonResult.cleaned;
 
   const quickRepliesResult = extractTag<string[]>(text, 'QUICK_REPLIES');
   text = quickRepliesResult.cleaned;
@@ -77,16 +86,30 @@ export function parseAssistantResponse(rawText: string): ParsedResponse {
   const categoriesResult = extractTag<Category[]>(text, 'CATEGORIES');
   text = categoriesResult.cleaned;
 
+  let checkoutForm = false;
+  if (text.includes('<CHECKOUT_FORM/>') || text.includes('<CHECKOUT_FORM>')) {
+    checkoutForm = true;
+    text = text.replace(/<CHECKOUT_FORM\/?>.*?<\/?CHECKOUT_FORM>/g, '');
+    text = text.replace(/<CHECKOUT_FORM\/?>/g, '');
+  }
+
+  let showCartSummary = false;
+  if (text.includes('<CART_SUMMARY/>') || text.includes('<CART_SUMMARY>')) {
+    showCartSummary = true;
+    text = text.replace(/<CART_SUMMARY\/>/g, '').replace(/<CART_SUMMARY>/g, '');
+  }
+
   // Clean excessive whitespace
   text = text.replace(/\n{3,}/g, '\n\n').trim();
 
-  const result: ParsedResponse = { text };
+  const result: ParsedResponse = { text, checkoutForm, showCartSummary };
 
   if (productsResult.data && Array.isArray(productsResult.data) && productsResult.data.length > 0) {
     result.products = productsResult.data;
-    if (productsResult.data.length > 2) {
-      result.comparison = productsResult.data;
-    }
+  }
+
+  if (comparisonResult.data && Array.isArray(comparisonResult.data) && comparisonResult.data.length > 0) {
+    result.comparison = comparisonResult.data;
   }
 
   if (quickRepliesResult.data && Array.isArray(quickRepliesResult.data) && quickRepliesResult.data.length > 0) {
