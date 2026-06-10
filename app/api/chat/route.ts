@@ -1,4 +1,4 @@
-import { streamText } from 'ai';
+import { streamText, generateText } from 'ai';
 import { buildSystemPrompt, getFestivalContext } from '@/app/lib/ai/system-prompt';
 import { getMCPClient } from '@/app/lib/mcp/client';
 import type { CartItem, Language } from '@/app/lib/mcp/types';
@@ -450,8 +450,24 @@ export async function POST(request: Request) {
       try {
         console.log(`[KASA] Using ${modelConfig.provider}`);
 
+        // Step 1: Intent Routing
+        const lastAssistantMsg = conversations.get(sessionId)?.slice(-1)[0]?.content || '';
+        const intentResult = await generateText({
+          model: modelConfig.model,
+          system: 'Classify this user message into exactly one intent: SEARCH | GIFT | CHECKOUT | TRACK | BROWSE | URGENT | CASUAL | CLARIFY. Respond with ONLY the intent word. Nothing else.',
+          prompt: `Message: "${message}"\nContext clues: "${cart.length > 0 ? 'Cart has items' : 'Cart is empty'}" "${lastAssistantMsg.slice(0, 100)}"`,
+          temperature: 0,
+        });
+        
+        // Ensure intent matches one of our expected types
+        const rawIntent = intentResult.text.trim().toUpperCase();
+        const validIntents = ['SEARCH', 'GIFT', 'CHECKOUT', 'TRACK', 'BROWSE', 'URGENT', 'CASUAL', 'CLARIFY'];
+        const detectedIntent = validIntents.includes(rawIntent) ? rawIntent : 'SEARCH';
+        
+        console.log(`[KASA] Detected Intent: ${detectedIntent}`);
+
         const festivalContext = getFestivalContext();
-        const systemPrompt = buildSystemPrompt(language, giftMode, cart, deliveryCity ?? null, festivalContext);
+        const systemPrompt = buildSystemPrompt(language, giftMode, cart, deliveryCity ?? null, festivalContext, detectedIntent);
         const mcpData = await executeMCPTools(message);
 
         let history = conversations.get(sessionId) ?? [];

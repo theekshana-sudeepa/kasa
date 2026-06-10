@@ -1,0 +1,133 @@
+.group-gift-container {
+  background: var(--kasa-surface);
+  border: 1px solid var(--kasa-border);
+  border-radius: 16px;
+  padding: 16px;
+  margin: 16px 0;
+  box-shadow: var(--kasa-shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.group-gift-container::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--kasa-primary-500), #00d2ff);
+}
+
+.gg-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.gg-emoji {
+  font-size: 28px;
+  background: var(--kasa-surface-2);
+  padding: 8px;
+  border-radius: 12px;
+}
+
+.gg-header h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--kasa-primary-400);
+}
+
+.gg-header p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  color: var(--kasa-text-2);
+}
+
+.gg-progress-block {
+  background: var(--kasa-bg);
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.gg-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.gg-progress-bar {
+  height: 8px;
+  background: var(--kasa-surface-2);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 8px;
+}
+
+.gg-progress-fill {
+  height: 100%;
+  background: var(--kasa-primary-500);
+  border-radius: 4px;
+  transition: width 0.5s ease-out;
+  position: relative;
+}
+
+.gg-progress-fill::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+.gg-status {
+  margin: 0;
+  font-size: 12px;
+  color: var(--kasa-text-3);
+  text-align: right;
+}
+
+.gg-link-block {
+  display: flex;
+  gap: 8px;
+}
+
+.gg-link-block input {
+  flex: 1;
+  background: var(--kasa-bg);
+  border: 1px solid var(--kasa-border);
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--kasa-text-2);
+  font-family: monospace;
+  font-size: 13px;
+}
+
+.gg-link-block input:focus {
+  outline: none;
+  border-color: var(--kasa-primary-500);
+}
+
+.gg-link-block button {
+  background: var(--kasa-primary-500);
+  color: white;
+  border: none;
+  padding: 0 16px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s;
+}
+
+.gg-link-block button:hover {
+  background: var(--kasa-primary-600);
+}

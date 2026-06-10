@@ -19,6 +19,8 @@ export interface ParsedResponse {
   categories?: Category[];
   checkoutForm?: boolean;
   showCartSummary?: boolean;
+  tenSecondDecision?: Product;
+  groupGift?: { goal: number; productName: string };
 }
 
 function safeParse<T>(raw: string): T | null {
@@ -86,6 +88,12 @@ export function parseAssistantResponse(rawText: string): ParsedResponse {
   const categoriesResult = extractTag<Category[]>(text, 'CATEGORIES');
   text = categoriesResult.cleaned;
 
+  const tenSecondDecisionResult = extractTag<Product>(text, 'TEN_SECOND_DECISION');
+  text = tenSecondDecisionResult.cleaned;
+
+  const groupGiftResult = extractTag<{ goal: number; productName: string }>(text, 'GROUP_GIFT');
+  text = groupGiftResult.cleaned;
+
   let checkoutForm = false;
   if (text.includes('<CHECKOUT_FORM/>') || text.includes('<CHECKOUT_FORM>')) {
     checkoutForm = true;
@@ -134,6 +142,14 @@ export function parseAssistantResponse(rawText: string): ParsedResponse {
 
   if (categoriesResult.data && Array.isArray(categoriesResult.data) && categoriesResult.data.length > 0) {
     result.categories = categoriesResult.data;
+  }
+
+  if (tenSecondDecisionResult.data) {
+    result.tenSecondDecision = tenSecondDecisionResult.data;
+  }
+
+  if (groupGiftResult.data) {
+    result.groupGift = groupGiftResult.data;
   }
 
   return result;

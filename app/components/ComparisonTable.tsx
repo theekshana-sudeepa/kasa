@@ -22,8 +22,9 @@ export default function ComparisonTable({ products }: ComparisonTableProps) {
     });
   };
 
-  // Find the cheapest product to highlight
+  // Find the cheapest and most expensive product to highlight
   const minPrice = Math.min(...products.map(p => p.price));
+  const maxPrice = Math.max(...products.map(p => p.price));
 
   return (
     <div className="comparison-table-wrapper">
@@ -47,11 +48,22 @@ export default function ComparisonTable({ products }: ComparisonTableProps) {
           </tr>
           <tr>
             <td>Price</td>
-            {products.map((p, idx) => (
-              <td key={idx} className={p.price === minPrice ? 'highlight' : ''}>
-                Rs. {p.price.toLocaleString()}
-              </td>
-            ))}
+            {products.map((p, idx) => {
+              const priceRatio = maxPrice > 0 ? p.price / maxPrice : 0;
+              return (
+                <td key={idx} className={p.price === minPrice ? 'highlight' : ''}>
+                  Rs. {p.price.toLocaleString()}
+                  <div style={{ marginTop: '6px', height: '4px', background: 'var(--kasa-surface-2)', borderRadius: '2px', overflow: 'hidden' }}>
+                    <div style={{
+                      width: `${priceRatio * 100}%`,
+                      height: '100%',
+                      background: p.price === minPrice ? '#22c55e' : 'var(--kasa-primary-400)',
+                      borderRadius: '2px'
+                    }} />
+                  </div>
+                </td>
+              );
+            })}
           </tr>
           <tr>
             <td>Stock</td>

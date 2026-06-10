@@ -1,5 +1,19 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { ChatMessage, CartItem, Language } from '../mcp/types';
+
+export interface OccasionMemory {
+  person: string;
+  type: string;
+  date: string;
+}
+
+export interface UserMemory {
+  lastDeliveryCity?: string | null;
+  lastOrderDate?: string;
+  upcomingOccasions?: OccasionMemory[];
+  hasOrderedBefore?: boolean;
+}
 
 interface ChatState {
   messages: ChatMessage[];
@@ -10,6 +24,8 @@ interface ChatState {
   deliveryDate: string | null;
   isLoading: boolean;
   sessionId: string;
+  userMemory: UserMemory;
+  ghostContext: any;
 
   addMessage: (msg: ChatMessage) => void;
   updateLastAssistantMessage: (content: string) => void;
@@ -23,26 +39,32 @@ interface ChatState {
   setDeliveryCity: (city: string) => void;
   setDeliveryDate: (date: string) => void;
   setCart: (cart: CartItem[]) => void;
+  updateUserMemory: (memory: Partial<UserMemory>) => void;
+  setGhostContext: (context: any) => void;
 }
 
 // Use a fixed session ID to avoid SSR/client mismatch
 // It will be unique per tab since the store is created fresh each time
 const SESSION_ID = 'kasa-' + Math.random().toString(36).slice(2, 10);
 
-export const useChatStore = create<ChatState>((set) => ({
-  messages: [],
-  cart: [],
-  language: 'en',
-  giftMode: false,
-  deliveryCity: null,
-  deliveryDate: null,
-  isLoading: false,
-  sessionId: SESSION_ID,
+export const useChatStore = create<ChatState>()(
+  persist(
+    (set) => ({
+      messages: [],
+      cart: [],
+      language: 'en',
+      giftMode: false,
+      deliveryCity: null,
+      deliveryDate: null,
+      isLoading: false,
+      sessionId: SESSION_ID,
+      userMemory: {},
+      ghostContext: null,
 
-  addMessage: (msg) =>
-    set((state) => ({
-      messages: [...state.messages, msg],
-    })),
+      addMessage: (msg) =>
+        set((state) => ({
+          messages: [...state.messages, msg],
+        })),
 
   updateLastAssistantMessage: (content) =>
     set((state) => {
@@ -108,4 +130,18 @@ export const useChatStore = create<ChatState>((set) => ({
   setDeliveryDate: (date) => set({ deliveryDate: date }),
 
   setCart: (cart) => set({ cart }),
-}));
+
+  updateUserMemory: (memory) =>
+    set((state) => ({
+      userMemory: { ...state.userMemory, ...memory },
+    })),
+
+  setGhostContext: (context) => set({ ghostContext: context }),
+    }),
+    {
+      name: 'kasa-storage',
+      // We only want to persist the userMemory, not active session stuff like current cart/messages
+      partialize: (state) => ({ userMemory: state.userMemory }),
+    }
+  )
+);

@@ -93,4 +93,6 @@ export interface ChatMessage {
   categories?: Category[];
   checkoutForm?: boolean;
   showCartSummary?: boolean;
+  tenSecondDecision?: Product;
+  groupGift?: { goal: number; productName: string };
 }

@@ -173,7 +173,8 @@ export class KaprukaMCPClient {
 
   async callTool(
     name: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    retryCount = 0
   ): Promise<MCPToolResult> {
     await this.initialize();
 
@@ -216,6 +217,34 @@ export class KaprukaMCPClient {
         isError: true,
       };
     }
+
+    // --- V2.0 Tool Result Verification Layer ---
+    try {
+      const text = result.content[0]?.text || '';
+      if (name === 'kapruka_search_products' && text.trim() && !text.includes('No products found')) {
+        // Price sanity check + name check
+        if (!text.includes('Rs.') && !text.includes('LKR')) throw new Error('Missing currency/price');
+      }
+      if (name === 'kapruka_create_order') {
+        if (!text.includes('KAP-')) throw new Error('Order number missing or invalid format');
+      }
+      if (name === 'kapruka_check_delivery') {
+        if (!text.includes('Date:') && !text.includes('Fee:')) throw new Error('Missing delivery metadata');
+      }
+    } catch (verifError: any) {
+      console.warn(`[KASA MCP] Verification failed for ${name}: ${verifError.message}`);
+      if (retryCount < 1) {
+        console.log(`[KASA MCP] Retrying ${name}...`);
+        return this.callTool(name, args, retryCount + 1);
+      } else {
+        console.error(`[KASA MCP] Tool ${name} failed verification twice. Returning graceful fallback.`);
+        return {
+          content: [{ type: 'text', text: `Failed to execute ${name}. Please try a slightly different query or browse categories instead.` }],
+          isError: true,
+        };
+      }
+    }
+    // ------------------------------------------
 
     console.log(`[KASA MCP] Tool ${name} returned ${result.content.length} content blocks`);
     return result;

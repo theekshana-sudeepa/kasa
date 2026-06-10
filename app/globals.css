@@ -1355,3 +1355,194 @@ input, textarea {
   color: var(--kasa-text-1);
   line-height: 1.2;
 }
+
+/* ── KASA v2.0 Animations & Welcome Screen ────────────────────────────── */
+
+.aurora-bg {
+  position: relative;
+  overflow: hidden;
+}
+
+.aurora-bg::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 50% 50%, rgba(90, 60, 160, 0.08) 0%, transparent 50%),
+              radial-gradient(circle at 80% 20%, rgba(255, 180, 0, 0.05) 0%, transparent 40%),
+              radial-gradient(circle at 20% 80%, rgba(0, 180, 120, 0.05) 0%, transparent 40%);
+  animation: aurora-spin 20s linear infinite;
+  z-index: -1;
+  pointer-events: none;
+}
+
+@keyframes aurora-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.enter-spring {
+  animation: spring-in 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes spring-in {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; box-shadow: var(--kasa-glow); }
+}
+
+.cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background-color: var(--kasa-primary-500);
+  vertical-align: middle;
+  margin-left: 2px;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.welcome-greeting {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--kasa-primary-600);
+  background: var(--kasa-surface);
+  padding: 10px 16px;
+  border-radius: 12px;
+  margin: 16px 0 24px;
+  box-shadow: var(--kasa-shadow-sm);
+  border: 1px solid var(--kasa-border);
+  text-align: center;
+}
+
+.fade-up-delay {
+  opacity: 0;
+  animation: fade-up 0.5s ease-out 0.6s forwards;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.stagger-chip {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: fade-up 0.4s ease-out forwards;
+}
+
+/* Base dark mode */
+:root[data-theme="dark"] {
+  --kasa-bg:         #0d0b12;
+  --kasa-surface:    #1a1626;
+  --kasa-surface-2:  #221e30;
+  --kasa-border:     #2d2840;
+  --kasa-text:       #f0edf7;
+  --kasa-text-2:     #9991b0;
+  --kasa-text-3:     #5c5478;
+  --kasa-glow:       0 0 40px rgba(90, 60, 160, 0.15);
+}
+
+/* ── Ten Second Decision ─────────────────────────────────────── */
+.tsd-container {
+  background: var(--kasa-surface);
+  border: 2px solid var(--kasa-primary-500);
+  border-radius: 16px;
+  padding: 16px;
+  margin-top: 12px;
+  box-shadow: var(--kasa-glow);
+  animation: spring-in 0.5s ease-out forwards;
+}
+
+.tsd-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tsd-header h4 {
+  margin: 0;
+  color: var(--kasa-primary-400);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.tsd-timer {
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--kasa-primary-500);
+  font-variant-numeric: tabular-nums;
+}
+
+.tsd-product {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  background: var(--kasa-surface-2);
+  padding: 12px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+
+.tsd-product img {
+  width: 60px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.tsd-name {
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.tsd-price {
+  color: var(--kasa-primary-500);
+  margin: 0;
+  font-weight: 500;
+}
+
+.tsd-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.tsd-btn-stop {
+  flex: 1;
+  padding: 12px;
+  border: 1px solid var(--kasa-border);
+  background: transparent;
+  color: var(--kasa-text);
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tsd-btn-accept {
+  flex: 1;
+  padding: 12px;
+  border: none;
+  background: var(--kasa-primary-500);
+  color: white;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tsd-accepted {
+  border-color: #22c55e;
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.2);
+}
+
+.tsd-stopped {
+  border-color: var(--kasa-border);
+  box-shadow: none;
+  opacity: 0.8;
+}

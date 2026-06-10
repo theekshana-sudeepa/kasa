@@ -16,6 +16,8 @@ import TrackingCard from './components/TrackingCard';
 import CartBadge from './components/CartBadge';
 import CartDrawer from './components/CartDrawer';
 import CategoryGrid from './components/CategoryGrid';
+import TenSecondDecision from './components/TenSecondDecision';
+import GroupGiftLink from './components/GroupGiftLink';
 import type { ChatMessage, Product } from './lib/mcp/types';
 import { parseAssistantResponse } from './lib/ai/response-parser';
 
@@ -251,6 +253,27 @@ export default function Home() {
                   {msg.comparison && msg.comparison.length > 0 && (
                     <div style={{ paddingLeft: '42px', paddingRight: '16px' }}>
                       <ComparisonTable products={msg.comparison} />
+                    </div>
+                  )}
+
+                  {msg.tenSecondDecision && (
+                    <div style={{ paddingLeft: '42px', paddingRight: '16px', margin: '16px 0' }}>
+                      <TenSecondDecision 
+                        product={msg.tenSecondDecision} 
+                        onDecisionMade={(accepted) => {
+                          if (accepted) {
+                            sendMessage(`Awesome, I'll take it!`);
+                          } else {
+                            sendMessage(`No thanks, show me something else.`);
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {msg.groupGift && (
+                    <div style={{ paddingLeft: '42px', paddingRight: '16px', margin: '16px 0' }}>
+                      <GroupGiftLink goal={msg.groupGift.goal} productName={msg.groupGift.productName} />
                     </div>
                   )}
 
