@@ -95,4 +95,5 @@ export interface ChatMessage {
   showCartSummary?: boolean;
   tenSecondDecision?: Product;
   groupGift?: { goal: number; productName: string };
+  giftMessage?: string;
 }

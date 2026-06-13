@@ -21,6 +21,7 @@ export interface ParsedResponse {
   showCartSummary?: boolean;
   tenSecondDecision?: Product;
   groupGift?: { goal: number; productName: string };
+  giftMessage?: string;
 }
 
 function safeParse<T>(raw: string): T | null {
@@ -94,6 +95,18 @@ export function parseAssistantResponse(rawText: string): ParsedResponse {
   const groupGiftResult = extractTag<{ goal: number; productName: string }>(text, 'GROUP_GIFT');
   text = groupGiftResult.cleaned;
 
+  // Extract gift message (plain text, not JSON)
+  let giftMessage: string | undefined;
+  const gmOpen = text.indexOf('<GIFT_MESSAGE>');
+  const gmClose = text.indexOf('</GIFT_MESSAGE>');
+  if (gmOpen !== -1 && gmClose !== -1) {
+    giftMessage = text.slice(gmOpen + '<GIFT_MESSAGE>'.length, gmClose).trim();
+    text = (text.slice(0, gmOpen) + text.slice(gmClose + '</GIFT_MESSAGE>'.length)).trim();
+  } else if (gmOpen !== -1) {
+    // Streaming: tag opened but not closed yet
+    text = text.slice(0, gmOpen).trim();
+  }
+
   let checkoutForm = false;
   if (text.includes('<CHECKOUT_FORM/>') || text.includes('<CHECKOUT_FORM>')) {
     checkoutForm = true;
@@ -150,6 +163,10 @@ export function parseAssistantResponse(rawText: string): ParsedResponse {
 
   if (groupGiftResult.data) {
     result.groupGift = groupGiftResult.data;
+  }
+
+  if (giftMessage) {
+    result.giftMessage = giftMessage;
   }
 
   return result;

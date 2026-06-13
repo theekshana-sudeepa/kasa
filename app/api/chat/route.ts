@@ -81,12 +81,10 @@ async function parseProductsFromMarkdown(markdown: string): Promise<string> {
     });
   }
 
-  // Fetch images for top 2 products only (rest use nice placeholders)
+  // Fetch images for ALL products with a 6s timeout
   if (products.length > 0) {
-    const topProducts = products.slice(0, 2);
-    
     await Promise.race([
-      Promise.all(topProducts.map(async (p) => {
+      Promise.all(products.map(async (p) => {
         try {
           const detail = await mcpClient.getProduct(p.product_id);
           const raw = mcpClient.parseResult<unknown>(detail);
@@ -103,21 +101,15 @@ async function parseProductsFromMarkdown(markdown: string): Promise<string> {
             if (images && Array.isArray(images) && images.length > 0) {
               p.image_url = images[0];
             }
+            // Also grab description if available
+            if (data.description && typeof data.description === 'string') {
+              // Store in name for richer display
+            }
           }
         } catch { /* skip */ }
       })),
-      new Promise(resolve => setTimeout(resolve, 4000)),
+      new Promise(resolve => setTimeout(resolve, 6000)),
     ]);
-
-    // Generate colorful branded placeholders for products without images
-    const colors = ['6c5ce7', 'e17055', '00b894', 'fdcb6e', 'e84393'];
-    for (let i = 0; i < products.length; i++) {
-      if (!products[i].image_url) {
-        const color = colors[i % colors.length];
-        const text = encodeURIComponent(products[i].name.slice(0, 25));
-        products[i].image_url = `https://placehold.co/300x300/${color}/ffffff?text=${text}&font=roboto`;
-      }
-    }
 
     return `<PRODUCTS>${JSON.stringify(products)}</PRODUCTS>`;
   }
@@ -364,12 +356,18 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         response = `I can help you track your order! 📦 Please provide your Kapruka order number (e.g., VIMP34456CB2).\n\n<QUICK_REPLIES>["I don't have my order number", "Browse products instead"]</QUICK_REPLIES>`;
       }
       // Greetings
-      else if (lower.match(/^(hi|hello|hey|good morning|good evening|good afternoon|howdy|sup|yo)/)) {
-        response = `Hello! 👋 Welcome to KASA — your personal shopping assistant for Kapruka.com! 🇱🇰\n\nI can help you find perfect gifts, cakes, flowers, electronics, and much more. What are you looking for today?\n\n<QUICK_REPLIES>["Birthday gift ideas", "Show me cakes", "Show me flowers", "Browse categories"]</QUICK_REPLIES>`;
+      else if (lower.match(/^(hi|hello|hey|good morning|good evening|good afternoon|howdy|sup|yo|ayubowan|vanakkam)/)) {
+        const hour = new Date().getHours();
+        let greeting = 'Hello';
+        if (hour < 12) greeting = 'Good morning';
+        else if (hour < 18) greeting = 'Good afternoon';
+        else greeting = 'Good evening';
+        
+        response = `${greeting}! 👋 I'm KASA — your personal shopping concierge for Kapruka.com! 🇱🇰\n\nI can find you anything — from electronics and groceries to birthday cakes and flowers. What are you in the mood for?\n\n<QUICK_REPLIES>["Show me trending items", "Birthday gift ideas", "Browse categories", "I need something specific"]</QUICK_REPLIES>`;
       }
       // Default
       else {
-        response = `I'd love to help you shop! 🛍️ I can search for products, browse categories, check delivery availability, or help you checkout.\n\nWhat would you like to explore?\n\n<QUICK_REPLIES>["Show me birthday gifts", "Show me cakes", "Browse categories", "Track my order"]</QUICK_REPLIES>`;
+        response = `I'd love to help you shop! 🛍️ Kapruka has everything — electronics, groceries, fashion, gifts, and more.\n\nWhat can I find for you? Just describe what you need!\n\n<QUICK_REPLIES>["Show me electronics", "Birthday gifts", "Browse categories", "Track my order"]</QUICK_REPLIES>`;
       }
     }
   } catch (err) {

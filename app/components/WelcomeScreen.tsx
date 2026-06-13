@@ -1,88 +1,222 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useChatStore } from '../lib/store/chat-store';
 import { getFestivalContext } from '../lib/ai/system-prompt';
+import { motion } from 'framer-motion';
 
 interface WelcomeScreenProps {
   onChipClick: (text: string) => void;
 }
 
-const chips = [
-  { emoji: '🎁', label: 'Gift Ideas' },
-  { emoji: '🎂', label: 'Cakes' },
-  { emoji: '💐', label: 'Flowers' },
-  { emoji: '🎲', label: 'Surprise Me' },
-  { emoji: '🛍️', label: 'Trending' },
+const everydayChips = [
+  { emoji: '📱', label: 'Electronics', query: 'Show me electronics' },
+  { emoji: '🛒', label: 'Groceries', query: 'Show me grocery items' },
+  { emoji: '👗', label: 'Fashion', query: 'Show me fashion items' },
+  { emoji: '🏠', label: 'Home & Living', query: 'Show me home items' },
+  { emoji: '👶', label: 'Baby & Kids', query: 'Show me baby items' },
 ];
+
+const giftChips = [
+  { emoji: '🎁', label: 'Gift Ideas', query: 'Show me gift ideas' },
+  { emoji: '💐', label: 'Flowers', query: 'Show me flowers' },
+  { emoji: '🎂', label: 'Cakes', query: 'Show me cakes' },
+  { emoji: '🍫', label: 'Chocolates', query: 'Show me chocolates' },
+  { emoji: '🎲', label: 'Surprise Me', query: 'Surprise me! 🎲' },
+];
+
+const tagline = "The only AI that shops like a Sri Lankan thinks.";
 
 export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
   const [mounted, setMounted] = useState(false);
-  const [tagline, setTagline] = useState('');
-  const fullTagline = "The only AI that shops like a Sri Lankan thinks.";
-  
+  const [typedText, setTypedText] = useState('');
+  const [showCursor, setShowCursor] = useState(true);
   const userMemory = useChatStore((state) => state.userMemory);
+  const language = useChatStore((state) => state.language);
+  const typingRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setMounted(true);
+    
+    // Typewriter effect for tagline
     let i = 0;
-    const interval = setInterval(() => {
-      setTagline(fullTagline.slice(0, i + 1));
-      i++;
-      if (i > fullTagline.length) clearInterval(interval);
-    }, 30);
-    return () => clearInterval(interval);
+    const type = () => {
+      if (i <= tagline.length) {
+        setTypedText(tagline.slice(0, i));
+        i++;
+        typingRef.current = setTimeout(type, 35 + Math.random() * 25);
+      } else {
+        // Stop cursor after typing
+        setTimeout(() => setShowCursor(false), 1500);
+      }
+    };
+    
+    const startDelay = setTimeout(type, 600);
+    
+    return () => {
+      clearTimeout(startDelay);
+      if (typingRef.current) clearTimeout(typingRef.current);
+    };
   }, []);
 
-  // Generate Ghost Context Greeting
   const getGreeting = () => {
     const hour = new Date().getHours();
-    let timeGreeting = 'Hello!';
-    if (hour < 12) timeGreeting = 'Good morning! ☀️';
-    else if (hour < 18) timeGreeting = 'Good afternoon! 🌅';
-    else timeGreeting = 'Good evening! 🌙';
+    
+    if (language === 'si') {
+      if (hour < 12) return 'සුභ උදෑසනක්! ☀️ අද මොනවද හොයන්නේ?';
+      if (hour < 18) return 'සුභ දහවලක්! 🌅 මොනවද ගන්න ඕනේ?';
+      return 'සුභ සන්ධ්‍යාවක්! 🌙 රෑට shopping ද?';
+    }
+    
+    if (language === 'tanglish') {
+      if (hour < 12) return 'Good morning! ☀️ Enna thevai innaiku?';
+      if (hour < 18) return 'Good afternoon! 🌅 Shopping pannalama?';
+      return 'Good evening! 🌙 Late night shopping ah?';
+    }
 
     const festival = getFestivalContext();
     if (festival) {
-      return `${timeGreeting} ${festival.split('—')[0]} is near. Want me to find something festive?`;
+      const festivalName = festival.split('—')[0].split('!')[0].trim();
+      return `${festivalName} is near! 🎉 Want something festive?`;
     }
 
     if (userMemory.hasOrderedBefore && userMemory.lastDeliveryCity) {
-      return `${timeGreeting} Welcome back! 👋 Last time you sent something to ${userMemory.lastDeliveryCity} — ready to shop again?`;
+      return `Welcome back! 👋 Shopping for ${userMemory.lastDeliveryCity} again?`;
     }
 
-    if (hour < 12) {
-      return `${timeGreeting} Need to send something today? I've got same-day delivery options ready.`;
-    } else if (new Date().getDay() === 5 && hour > 16) {
-      return `${timeGreeting} Weekend plans? Great time to send something special.`;
-    }
-
-    return `${timeGreeting} What are you looking for today?`;
+    if (hour < 6) return "Can't sleep? Let's shop! 🌙";
+    if (hour < 12) return "Good morning! ☀️ What are you looking for today?";
+    if (hour < 14) return "Lunch break shopping? Smart move! 🍽️";
+    if (hour < 18) return "Good afternoon! 🌅 Finding something nice?";
+    if (hour >= 21) return "Late night browsing? I like your style 🌙";
+    return "Good evening! 🌆 What can I find for you?";
   };
 
   if (!mounted) return null;
 
-  return (
-    <div className="welcome-screen aurora-bg">
-      <div className="welcome-logo enter-spring">🪞</div>
-      <h1 className="welcome-title">KASA</h1>
-      <p className="welcome-tagline">{tagline}<span className="cursor" /></p>
-      
-      <div className="welcome-greeting fade-up-delay">
-        <p>{getGreeting()}</p>
-      </div>
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: { staggerChildren: 0.12, delayChildren: 0.1 }
+    }
+  };
 
-      <div className="welcome-chips">
-        {chips.map((chip, index) => (
-          <button
+  const itemVariants = {
+    hidden: { y: 24, opacity: 0 },
+    visible: {
+      y: 0,
+      opacity: 1,
+      transition: { type: "spring" as const, stiffness: 300, damping: 24 }
+    }
+  };
+
+  const chipVariants = {
+    hidden: { y: 16, opacity: 0, scale: 0.9 },
+    visible: {
+      y: 0,
+      opacity: 1,
+      scale: 1,
+      transition: { type: "spring" as const, stiffness: 400, damping: 25 }
+    }
+  };
+
+  return (
+    <motion.div 
+      className="welcome-screen"
+      variants={containerVariants}
+      initial="hidden"
+      animate="visible"
+    >
+      {/* Logo */}
+      <motion.div 
+        className="welcome-logo"
+        initial={{ scale: 0, rotate: -180 }}
+        animate={{ scale: 1, rotate: 0 }}
+        transition={{ type: "spring" as const, stiffness: 200, damping: 15, delay: 0.1 }}
+      >
+        🪞
+      </motion.div>
+      
+      {/* Title */}
+      <motion.h1 variants={itemVariants} className="welcome-title">
+        KASA
+      </motion.h1>
+      
+      {/* Typewriter tagline */}
+      <motion.p variants={itemVariants} className="welcome-tagline">
+        {typedText}
+        {showCursor && <span className="cursor" />}
+      </motion.p>
+      
+      {/* Dynamic greeting */}
+      <motion.div variants={itemVariants} className="welcome-greeting">
+        {getGreeting()}
+      </motion.div>
+
+      {/* Everyday Shopping */}
+      <motion.div variants={itemVariants} className="welcome-section-label">
+        🛍️ Shop for yourself
+      </motion.div>
+      
+      <motion.div 
+        variants={containerVariants}
+        className="welcome-chips"
+        style={{ marginBottom: '20px' }}
+      >
+        {everydayChips.map((chip, i) => (
+          <motion.button
             key={chip.label}
-            className="welcome-chip stagger-chip"
-            style={{ animationDelay: `${500 + index * 50}ms` }}
-            onClick={() => onChipClick(chip.label === 'Surprise Me' ? 'Surprise me! 🎲' : `Show me ${chip.label.toLowerCase()}`)}
+            className="welcome-chip"
+            variants={chipVariants}
+            custom={i}
+            whileHover={{ scale: 1.06, y: -3 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => onChipClick(chip.query)}
           >
             {chip.emoji} {chip.label}
-          </button>
+          </motion.button>
         ))}
-      </div>
-    </div>
+      </motion.div>
+
+      {/* Gifting */}
+      <motion.div variants={itemVariants} className="welcome-section-label">
+        🎁 Send a gift
+      </motion.div>
+      
+      <motion.div 
+        variants={containerVariants}
+        className="welcome-chips"
+      >
+        {giftChips.map((chip, i) => (
+          <motion.button
+            key={chip.label}
+            className={`welcome-chip ${chip.label === 'Surprise Me' ? 'highlight' : ''}`}
+            variants={chipVariants}
+            custom={i}
+            whileHover={{ scale: 1.06, y: -3 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => onChipClick(chip.query)}
+          >
+            {chip.emoji} {chip.label}
+          </motion.button>
+        ))}
+      </motion.div>
+      
+      {/* Powered by Kapruka */}
+      <motion.div 
+        variants={itemVariants}
+        style={{
+          marginTop: '32px',
+          fontSize: '11px',
+          color: 'var(--kasa-text-3)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontWeight: 500,
+        }}
+      >
+        Powered by <strong style={{ color: 'var(--kasa-text-2)' }}>Kapruka.com</strong> 🇱🇰
+      </motion.div>
+    </motion.div>
   );
 }
