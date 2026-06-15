@@ -1,4 +1,5 @@
 import type { CartItem, Language } from '../mcp/types';
+import type { ExtractedIntent } from './intent-extractor';
 
 interface SriLankanFestival {
   name: string;
@@ -152,10 +153,11 @@ export function buildSystemPrompt(
   cart: CartItem[],
   deliveryCity: string | null,
   festivalContext: string | null,
-  intent: string = 'SEARCH'
+  extractedIntent: ExtractedIntent | null = null
 ): string {
   const langInstructions = getLanguageInstructions(language);
   const cartSummary = formatCartSummary(cart);
+  const intent = extractedIntent?.intent_category ?? 'SEARCH';
 
   let intentSubPrompt = '';
   switch (intent) {
@@ -196,10 +198,56 @@ User is stressed/urgent. Skip questions, go straight to curated picks. Provide s
       break;
   }
 
+  // Build emotional context block from extracted intent
+  let emotionalContextBlock = '';
+  if (extractedIntent && extractedIntent.emotion !== 'neutral') {
+    const emotionDescriptions: Record<string, string> = {
+      sad: 'The user is feeling sad or going through a difficult time. Lead with empathy, acknowledge their feelings, then gently guide to action.',
+      urgent: 'The user is stressed and needs help NOW. Be decisive, skip unnecessary questions, show immediate options.',
+      excited: 'The user is in a celebratory mood! Match their energy, be enthusiastic, help them celebrate.',
+      anxious: 'The user is worried or panicking (likely forgot something important). Reassure them first, then act fast.',
+      angry: 'The user may be frustrated. Be calm, understanding, and solution-oriented. Don\'t be overly cheerful.',
+      romantic: 'The user is in a romantic mood. Help them create a memorable gesture. Suggest premium, thoughtful options.',
+      grateful: 'The user wants to show appreciation. Help them find something meaningful that conveys their gratitude.',
+    };
+
+    const toneGuidance: Record<string, string> = {
+      empathetic: 'Use a gentle, understanding tone. Acknowledge emotions before suggesting products.',
+      excited: 'Be enthusiastic and celebrate with them! Use energy in your response.',
+      practical: 'Be direct and efficient. Focus on solutions.',
+      urgent: 'Be fast and decisive. Skip pleasantries, get straight to action.',
+      warm: 'Be friendly and caring. Make them feel supported.',
+      playful: 'Be light and fun. Keep it casual.',
+    };
+
+    emotionalContextBlock = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## 🧠 EMOTIONAL CONTEXT (auto-detected for this message)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+DETECTED EMOTION: ${extractedIntent.emotion.toUpperCase()}
+${emotionDescriptions[extractedIntent.emotion] || ''}
+
+OCCASION: ${extractedIntent.occasion}
+GIFT FOR: ${extractedIntent.gift_target}
+USER WANTS: ${extractedIntent.shopping_intent}
+TONE TO USE: ${extractedIntent.tone.toUpperCase()} — ${toneGuidance[extractedIntent.tone] || ''}
+${extractedIntent.urgency !== 'unknown' ? `URGENCY: ${extractedIntent.urgency.toUpperCase().replace('_', ' ')} — factor this into delivery options!` : ''}
+${extractedIntent.budget ? `BUDGET: Under Rs. ${extractedIntent.budget.max.toLocaleString()} — respect this strictly.` : ''}
+
+CRITICAL INSTRUCTION: Your response MUST reflect this emotional context.
+- Do NOT respond as if this is a neutral shopping request.
+- Acknowledge the emotional situation naturally (not robotically).
+- Then transition smoothly to helping them with the right products.
+- Use the products from the tool results — the search queries have already been optimized for this emotional context.
+`;
+  }
+
   return `SYSTEM: You are KASA (කැස) — Sri Lanka's most intelligent personal shopping AI,
 built exclusively for Kapruka.com. You are not a chatbot. You are a shopping mind.
 
 ${intentSubPrompt}
+${emotionalContextBlock}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ## IDENTITY & VOICE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

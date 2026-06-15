@@ -1,6 +1,8 @@
-import { streamText, generateText } from 'ai';
+import { streamText } from 'ai';
 import { buildSystemPrompt, getFestivalContext } from '@/app/lib/ai/system-prompt';
 import { getMCPClient } from '@/app/lib/mcp/client';
+import { extractIntent, extractIntentFallback } from '@/app/lib/ai/intent-extractor';
+import type { ExtractedIntent } from '@/app/lib/ai/intent-extractor';
 import type { CartItem, Language } from '@/app/lib/mcp/types';
 
 type Message = { role: 'user' | 'assistant' | 'system'; content: string };
@@ -277,13 +279,16 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
     }
 
     if (!response) {
-      const searchTerms = [
-        'show me', 'find', 'search', 'looking for', 'want', 'need',
-        'gift', 'buy', 'cake', 'flower', 'chocolate', 'electronic',
-        'grocer', 'birthday', 'anniversary', 'wedding', 'toy', 'gadget',
-        'phone', 'wine', 'hamper', 'fruit', 'baby', 'jewelry', 'perfume',
-        'sweet', 'clothing', 'book', 'surprise',
-      ];
+      // ── EMOTIONAL INTENT DETECTION (Fallback Mode) ──
+      // Use heuristic intent extraction to understand emotional messages
+      const heuristicIntent = extractIntentFallback(message);
+      console.log(`[KASA Fallback] Heuristic intent:`, JSON.stringify({
+        emotion: heuristicIntent.emotion,
+        intent: heuristicIntent.intent_category,
+        shopping: heuristicIntent.is_shopping,
+        queries: heuristicIntent.search_queries,
+        occasion: heuristicIntent.occasion,
+      }));
 
       // SURPRISE ME INTENT
       if (lower.match(/surprise me|random gift/i)) {
@@ -296,13 +301,56 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         response = `**Surprise!** I've pulled some completely random, premium wildcard items for you. How about one of these?\n\n${productsTag}`;
         response += `\n\n<QUICK_REPLIES>["Surprise me again!", "Show me cakes instead", "Browse categories"]</QUICK_REPLIES>`;
       }
-      // Search intent
-      else if (searchTerms.some(term => lower.includes(term))) {
-        let query = message
-          .replace(/^(show me|find me|search for|i want|i need|looking for|can you find|get me|i'm looking for|i am looking for)\s*/i, '')
-          .replace(/\s*(please|thanks|thank you|pls)$/i, '')
-          .trim();
-        if (query.length < 2) query = message;
+      // ── EMOTIONAL SHOPPING INTENT ──
+      // Handles messages like "I broke up with my girlfriend… I need to send some flowers"
+      else if (heuristicIntent.is_shopping && heuristicIntent.emotion !== 'neutral' && heuristicIntent.search_queries.length > 0) {
+        // Use emotional context to generate empathetic prefix
+        const emotionalPrefixes: Record<string, string> = {
+          sad: `I hear you, and I'm here to help. 💛 Let me find something perfect...`,
+          anxious: `Don't worry — I've got you covered! Let me find something right away...`,
+          excited: `That's amazing! 🎉 Let me find something to match the celebration!`,
+          romantic: `Aww, let me help you make it special! 💕`,
+          angry: `Let's fix this — I know just what to look for...`,
+          grateful: `What a thoughtful gesture! Let me find something meaningful...`,
+          urgent: `On it — no time to waste! Here's what I found:`,
+        };
+
+        const prefix = emotionalPrefixes[heuristicIntent.emotion] || '';
+        
+        // Search using the first (best) extracted query
+        const bestQuery = heuristicIntent.search_queries[0];
+        const result = await mcpClient.searchProducts({
+          query: bestQuery,
+          in_stock_only: true,
+          limit: 5,
+          ...(heuristicIntent.budget ? { max_price: heuristicIntent.budget.max } : {}),
+        });
+        const text = mcpClient.parseResult<string>(result);
+        productsTag = await parseProductsFromMarkdown(text);
+
+        // Try second query if first had no results
+        if (!productsTag && heuristicIntent.search_queries.length > 1) {
+          const secondQuery = heuristicIntent.search_queries[1];
+          const result2 = await mcpClient.searchProducts({ query: secondQuery, in_stock_only: true, limit: 5 });
+          const text2 = mcpClient.parseResult<string>(result2);
+          productsTag = await parseProductsFromMarkdown(text2);
+        }
+
+        if (productsTag) {
+          const occasionNote = heuristicIntent.occasion !== 'none' && heuristicIntent.occasion !== 'everyday shopping'
+            ? ` for this ${heuristicIntent.occasion}` : '';
+          const targetNote = heuristicIntent.gift_target !== 'unknown' && heuristicIntent.gift_target !== 'self'
+            ? ` for your ${heuristicIntent.gift_target}` : '';
+          
+          response = `${prefix}\n\nHere are some picks I think would be perfect${targetNote}${occasionNote}:\n\n${productsTag}\n\nWant me to find more options or shall we go with one of these?`;
+          response += `\n\n<QUICK_REPLIES>["Tell me more about the first one", "Show me more options", "Add to cart", "Search for something else"]</QUICK_REPLIES>`;
+        } else {
+          response = `${prefix}\n\nI couldn't find exact matches, but let me suggest some alternatives!\n\n<QUICK_REPLIES>["Show me flowers", "Show me chocolates", "Show me gift hampers", "Browse categories"]</QUICK_REPLIES>`;
+        }
+      }
+      // Regular search intent (neutral emotion)
+      else if (heuristicIntent.is_shopping && heuristicIntent.search_queries.length > 0) {
+        const query = heuristicIntent.search_queries[0];
 
         const result = await mcpClient.searchProducts({ query, in_stock_only: true, limit: 5 });
         const text = mcpClient.parseResult<string>(result);
@@ -378,39 +426,66 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
   return urgencyPrefix + response;
 }
 
-// Execute MCP tools for AI context
-async function executeMCPTools(message: string): Promise<string> {
+// Execute MCP tools using extracted intent for intelligent routing
+async function executeMCPToolsWithIntent(message: string, intent: ExtractedIntent): Promise<string> {
   const mcpClient = getMCPClient();
   const lower = message.toLowerCase();
   const results: string[] = [];
+  let preFormattedProducts = ''; // Pre-parsed products with REAL images
 
   try {
-    const searchTerms = [
-      'show me', 'find', 'search', 'looking for', 'want', 'need',
-      'gift', 'buy', 'cake', 'flower', 'chocolate', 'electronic',
-      'grocer', 'birthday', 'anniversary', 'wedding', 'toy', 'gadget',
-      'phone', 'wine', 'hamper', 'fruit', 'baby', 'jewelry', 'perfume',
-    ];
+    // Use extracted search queries for intelligent product search
+    if (intent.is_shopping && intent.search_queries.length > 0) {
+      let allSearchText = '';
+      
+      for (const query of intent.search_queries.slice(0, 2)) {
+        try {
+          const searchResult = await mcpClient.searchProducts({
+            query,
+            in_stock_only: true,
+            limit: 5,
+            ...(intent.budget ? { max_price: intent.budget.max } : {}),
+          });
+          const parsed = mcpClient.parseResult<string>(searchResult);
+          
+          if (parsed && !parsed.includes('No products found')) {
+            results.push(`[SEARCH RESULTS for "${query}" (intent: ${intent.shopping_intent})]:\n${parsed}`);
+            allSearchText += parsed + '\n';
+          }
+        } catch (searchErr) {
+          console.warn(`[KASA MCP] Search failed for "${query}":`, searchErr);
+        }
+      }
 
-    if (searchTerms.some(term => lower.includes(term))) {
-      let query = message
-        .replace(/^(show me|find me|search for|i want|i need|looking for|can you find|get me|i'm looking for|i am looking for)\s*/i, '')
-        .replace(/\s*(please|thanks|thank you|pls)$/i, '')
-        .trim();
-      if (query.length < 2) query = message;
+      // If AI queries didn't find anything, fall back to raw message extraction
+      if (results.length === 0) {
+        let fallbackQuery = message
+          .replace(/^(show me|find me|search for|i want|i need|looking for|can you find|get me|i'm looking for|i am looking for)\s*/i, '')
+          .replace(/\s*(please|thanks|thank you|pls)$/i, '')
+          .trim();
+        if (fallbackQuery.length < 2) fallbackQuery = message;
 
-      const searchResult = await mcpClient.searchProducts({ query, in_stock_only: true, limit: 5 });
-      const parsed = mcpClient.parseResult<string>(searchResult);
-      results.push(`[SEARCH RESULTS for "${query}"]:\n${parsed}`);
+        const searchResult = await mcpClient.searchProducts({ query: fallbackQuery, in_stock_only: true, limit: 5 });
+        const parsed = mcpClient.parseResult<string>(searchResult);
+        results.push(`[SEARCH RESULTS for "${fallbackQuery}"]:\n${parsed}`);
+        allSearchText = parsed;
+      }
+
+      // PRE-FETCH real product images from MCP getProduct endpoint
+      // This is the critical step — without it the AI invents fake image URLs
+      if (allSearchText) {
+        preFormattedProducts = await parseProductsFromMarkdown(allSearchText);
+      }
     }
-
-    if (lower.includes('categor') || lower.includes('browse') || lower.includes('what do you have')) {
+    // Non-shopping intents: handle browse, track, etc.
+    else if (intent.intent_category === 'BROWSE' || lower.includes('categor') || lower.includes('browse') || lower.includes('what do you have')) {
       const catResult = await mcpClient.listCategories();
       const parsed = mcpClient.parseResult<string>(catResult);
       results.push(`[CATEGORIES]:\n${parsed}`);
     }
 
-    const trackMatch = message.match(/(?:track|status|where is)\s+(?:order\s*)?(?:#?\s*)?([\w\d]{5,})/i);
+    // Track order if message contains order number
+    const trackMatch = message.match(/(?:track|status|where is)\s+(?:order\s*)?(?:#?\s*)([\w\d]{5,})/i);
     if (trackMatch) {
       const trackResult = await mcpClient.trackOrder(trackMatch[1]);
       const parsed = mcpClient.parseResult<string>(trackResult);
@@ -420,7 +495,12 @@ async function executeMCPTools(message: string): Promise<string> {
     console.error('[KASA MCP] Tool error:', err);
   }
 
-  return results.join('\n\n');
+  // Combine results + pre-formatted products with real images
+  let combined = results.join('\n\n');
+  if (preFormattedProducts) {
+    combined += `\n\n[PRE-FORMATTED PRODUCTS WITH REAL IMAGES — USE THIS EXACT JSON IN YOUR <PRODUCTS> TAG, DO NOT MODIFY OR INVENT IMAGE URLS]:\n${preFormattedProducts}`;
+  }
+  return combined;
 }
 
 export async function POST(request: Request) {
@@ -448,34 +528,64 @@ export async function POST(request: Request) {
       try {
         console.log(`[KASA] Using ${modelConfig.provider}`);
 
-        // Step 1: Intent Routing
+        // Step 1: Deep Intent Extraction (AI-powered)
         const lastAssistantMsg = conversations.get(sessionId)?.slice(-1)[0]?.content || '';
-        const intentResult = await generateText({
-          model: modelConfig.model,
-          system: 'Classify this user message into exactly one intent: SEARCH | GIFT | CHECKOUT | TRACK | BROWSE | URGENT | CASUAL | CLARIFY. Respond with ONLY the intent word. Nothing else.',
-          prompt: `Message: "${message}"\nContext clues: "${cart.length > 0 ? 'Cart has items' : 'Cart is empty'}" "${lastAssistantMsg.slice(0, 100)}"`,
-          temperature: 0,
-        });
-        
-        // Ensure intent matches one of our expected types
-        const rawIntent = intentResult.text.trim().toUpperCase();
-        const validIntents = ['SEARCH', 'GIFT', 'CHECKOUT', 'TRACK', 'BROWSE', 'URGENT', 'CASUAL', 'CLARIFY'];
-        const detectedIntent = validIntents.includes(rawIntent) ? rawIntent : 'SEARCH';
-        
-        console.log(`[KASA] Detected Intent: ${detectedIntent}`);
+        const conversationContext = cart.length > 0
+          ? `Cart has ${cart.length} items. ${lastAssistantMsg.slice(0, 150)}`
+          : lastAssistantMsg.slice(0, 200);
 
+        const extractedIntent = await extractIntent(
+          modelConfig.model,
+          message,
+          conversationContext
+        );
+        
+        console.log(`[KASA] Extracted Intent:`, JSON.stringify({
+          emotion: extractedIntent.emotion,
+          intent: extractedIntent.intent_category,
+          shopping: extractedIntent.is_shopping,
+          queries: extractedIntent.search_queries,
+          occasion: extractedIntent.occasion,
+          gift_target: extractedIntent.gift_target,
+          tone: extractedIntent.tone,
+        }));
+
+        // Step 2: Execute MCP tools using intelligent search queries
         const festivalContext = getFestivalContext();
-        const systemPrompt = buildSystemPrompt(language, giftMode, cart, deliveryCity ?? null, festivalContext, detectedIntent);
-        const mcpData = await executeMCPTools(message);
+        const systemPrompt = buildSystemPrompt(language, giftMode, cart, deliveryCity ?? null, festivalContext, extractedIntent);
+        const mcpData = await executeMCPToolsWithIntent(message, extractedIntent);
+
+        // Extract pre-formatted products (with real images) from mcpData
+        // We'll inject them directly after AI stream to guarantee real image URLs
+        let preFormattedTag = '';
+        let mcpDataForAI = mcpData;
+        const pfMarker = '[PRE-FORMATTED PRODUCTS WITH REAL IMAGES';
+        const pfIdx = mcpData.indexOf(pfMarker);
+        if (pfIdx !== -1) {
+          // Extract the <PRODUCTS>...</PRODUCTS> tag
+          const tagMatch = mcpData.slice(pfIdx).match(/<PRODUCTS>[\s\S]*?<\/PRODUCTS>/);
+          if (tagMatch) {
+            preFormattedTag = tagMatch[0];
+          }
+          // Strip the pre-formatted section from what we send to the AI
+          // AI only needs the search result text, not the JSON blob
+          mcpDataForAI = mcpData.slice(0, pfIdx).trim();
+        }
 
         let history = conversations.get(sessionId) ?? [];
-        const userContent = mcpData
-          ? `${message}\n\n--- TOOL RESULTS (format products using <PRODUCTS> JSON tags) ---\n${mcpData}`
+        // Tell the AI to focus on writing text — we'll handle the PRODUCTS tag ourselves
+        const noProductsTagInstruction = preFormattedTag
+          ? `\n\n[IMPORTANT: Do NOT output a <PRODUCTS> tag. Real product data with images will be appended automatically after your response. Just write your conversational text.]`
+          : '';
+        const userContent = mcpDataForAI
+          ? `${message}\n\n--- TOOL RESULTS ---\n${mcpDataForAI}${noProductsTagInstruction}`
           : message;
 
         history.push({ role: 'user' as const, content: userContent });
         if (history.length > MAX_HISTORY) history = history.slice(-MAX_HISTORY);
 
+        // Step 3: Generate emotionally-aware response
+        let finalText = '';
         const result = streamText({
           model: modelConfig.model,
           system: systemPrompt,
@@ -483,11 +593,40 @@ export async function POST(request: Request) {
           temperature: 0.7,
           onFinish: async (event) => {
             if (event.text) {
-              history.push({ role: 'assistant' as const, content: event.text });
+              finalText = event.text;
+              // Store clean text (without injected products) in history
+              history.push({ role: 'assistant' as const, content: event.text + (preFormattedTag ? '\n' + preFormattedTag : '') });
               conversations.set(sessionId, history);
             }
           },
         });
+
+        // If we have pre-formatted products with real images, inject them at the end of the stream
+        if (preFormattedTag) {
+          const encoder = new TextEncoder();
+          const injectTag = preFormattedTag;
+          
+          // Create a transform stream that appends the products tag after the AI finishes
+          let streamDone = false;
+          const transform = new TransformStream({
+            transform(chunk, controller) {
+              controller.enqueue(chunk);
+            },
+            flush(controller) {
+              if (!streamDone) {
+                streamDone = true;
+                // Append quick replies and the real products tag
+                controller.enqueue(encoder.encode(`\n${injectTag}`));
+              }
+            },
+          });
+
+          const baseResponse = result.toTextStreamResponse();
+          const transformedBody = baseResponse.body!.pipeThrough(transform);
+          return new Response(transformedBody, {
+            headers: baseResponse.headers,
+          });
+        }
 
         return result.toTextStreamResponse();
       } catch (aiError) {
