@@ -15,7 +15,7 @@ export default function Header({ onNewChat }: HeaderProps) {
   
   const languages: { key: Language; label: string }[] = [
     { key: 'en', label: 'EN' },
-    { key: 'si', label: 'සි' },
+    { key: 'si', label: '\u0DC3\u0DD2' },
     { key: 'tanglish', label: 'Mix' },
   ];
 
@@ -24,7 +24,9 @@ export default function Header({ onNewChat }: HeaderProps) {
   return (
     <header className="header" style={{ position: 'relative' }}>
       <div className="header-brand">
-        <div className="header-logo">🪞</div>
+        <div className="header-logo">
+          <span style={{ fontWeight: 900, color: 'white', fontSize: '16px', position: 'relative', zIndex: 1 }}>K</span>
+        </div>
         <div>
           <div className="header-title">KASA</div>
           <div className="header-subtitle">by Kapruka</div>

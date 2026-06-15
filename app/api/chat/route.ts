@@ -125,7 +125,7 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
   let urgencyPrefix = '';
   
   if (lower.match(/\b(urgent|asap|today|emergency|fast|quick)\b/i)) {
-    urgencyPrefix = `⚠️ **Urgency Detected:** I see you need this fast! I'll prioritize same-day delivery options available in Colombo & Suburbs.\n\n`;
+    urgencyPrefix = `**Urgency Detected:** I see you need this fast! I'll prioritize same-day delivery options available in Colombo & Suburbs.\n\n`;
   }
 
   try {
@@ -135,17 +135,17 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
       const itemLines = cart.map((item) => `• ${item.name} x${item.quantity} — Rs. ${item.price * item.quantity}`);
 
       if (itemLines.length > 0) {
-        response = `Great choice! 🎉 Let's complete your order.\n\n**Your Cart:**\n${itemLines.join('\n')}\n**Total: Rs. ${total}**\n\nTo proceed, I need a few details:\n\n📍 **Which city** should I deliver to?\n📅 **What date** do you need delivery? (YYYY-MM-DD)\n\nJust type the city name to get started!`;
+        response = `Great choice! Let's complete your order.\n\n**Your Cart:**\n${itemLines.join('\n')}\n**Total: Rs. ${total}**\n\nTo proceed, I need a few details:\n\n**Which city** should I deliver to?\n**What date** do you need delivery? (YYYY-MM-DD)\n\nJust type the city name to get started!`;
         response += `\n\n<QUICK_REPLIES>["Colombo", "Kandy", "Galle", "Negombo", "Deliver tomorrow"]</QUICK_REPLIES>`;
       } else {
-        response = `I'd love to help you checkout! 🛒\n\nTo place your order, I'll need:\n1. 📍 Delivery city\n2. 📅 Delivery date\n3. 👤 Recipient name & phone\n4. 📬 Delivery address\n\nWhich **city** should I deliver to?`;
+        response = `I'd love to help you checkout!\n\nTo place your order, I'll need:\n1. Delivery city\n2. Delivery date\n3. Recipient name & phone\n4. Delivery address\n\nWhich **city** should I deliver to?`;
         response += `\n\n<QUICK_REPLIES>["Colombo", "Kandy", "Galle", "Negombo"]</QUICK_REPLIES>`;
       }
     }
     // DELIVERY DATE RESPONSE
     else if (cart.length > 0 && lower.match(/(tomorrow|today|weekend|asap|as soon as possible|202\d-\d\d-\d\d|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|mon|tue|wed|thu|fri|sat|sun|next (week|month))/i) && message.split(' ').length <= 6) {
       const date = message.trim();
-      let deliveryMsg = `✅ Date confirmed: **${date}**`;
+      let deliveryMsg = `Date confirmed: **${date}**`;
       
       // Perform delivery check using MCP
       // Note: In fallback mode we use a mock check or actual MCP check if we have the city
@@ -154,7 +154,7 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         const checkResult = await mcpClient.checkDelivery(cityToCheck, date, cart[0].product_id);
         const checkText = mcpClient.parseResult<string>(checkResult);
         if (checkText.includes('Fee:')) {
-          deliveryMsg += `\n\n🚚 ${checkText}`;
+          deliveryMsg += `\n\n${checkText}`;
         }
       } catch (e) {
         console.error('Delivery check error', e);
@@ -167,7 +167,7 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
     }
     // RE-ENTER DETAILS
     else if (lower.match(/re-enter details|reenter|change details|wrong details|no, let me/i)) {
-      response = `No problem! Let's try that again. ✏️\n\nPlease fill out the delivery details below:`;
+      response = `No problem! Let's try that again.\n\nPlease fill out the delivery details below:`;
       response += `\n\n<CHECKOUT_FORM/>`;
     }
     // RECIPIENT DETAILS RESPONSE
@@ -214,12 +214,12 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         senderEmail
       });
 
-      response = `Great, I've noted the delivery details:\n\n👤 **Name:** ${name}\n📞 **Phone:** ${phone}\n📬 **Address:** ${address}\n\nIs this correct? If yes, how would you like to pay?`;
+      response = `Great, I've noted the delivery details:\n\n**Name:** ${name}\n**Phone:** ${phone}\n**Address:** ${address}\n\nIs this correct? If yes, how would you like to pay?`;
       response += `\n\n<QUICK_REPLIES>["Credit/Debit Card", "Cash on Delivery", "Bank Transfer", "No, let me re-enter details"]</QUICK_REPLIES>`;
     }
     // PAYMENT METHOD RESPONSE
     else if (lower.match(/credit.*card|debit|cash on delivery|bank transfer|cod/i)) {
-      response = `✅ Payment method selected: **${message.trim()}**\n\nI have everything I need to place your order. Please confirm to proceed.`;
+      response = `Payment method selected: **${message.trim()}**\n\nI have everything I need to place your order. Please confirm to proceed.`;
       response += `\n\n<QUICK_REPLIES>["Confirm Order", "Cancel"]</QUICK_REPLIES>`;
     }
     // CONFIRM ORDER RESPONSE
@@ -251,14 +251,14 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
             currency: "LKR"
           };
           
-          response = `🎉 **Order Created Successfully!**\n\nYour order number is **${order.order_number}**. Please click the secure link below to complete your payment. Once paid, we'll start preparing your items for delivery! 🚀`;
+          response = `**Order Created Successfully!**\n\nYour order number is **${order.order_number}**. Please click the secure link below to complete your payment. Once paid, we'll start preparing your items for delivery!`;
           response += `\n\n<ORDER>${JSON.stringify(order)}</ORDER>\n\n<CART_UPDATE>[]</CART_UPDATE>`;
         } else {
           throw new Error('Failed to parse order from MCP');
         }
       } catch (err) {
         console.error('Failed to create order', err);
-        response = `Oops, something went wrong creating your order. Please try again! ⚠️\n\n<QUICK_REPLIES>["Confirm Order", "Cancel"]</QUICK_REPLIES>`;
+        response = `Oops, something went wrong creating your order. Please try again!\n\n<QUICK_REPLIES>["Confirm Order", "Cancel"]</QUICK_REPLIES>`;
       }
     }
     // DYNAMIC CITY CHECK (Checkout mode only)
@@ -271,7 +271,7 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         
         fallbackMemory.set(sessionId, { ...(fallbackMemory.get(sessionId) || {}), deliveryCity: matchedCityName });
         
-        response = `✅ Delivery to **${matchedCityName}** — great!\n\nNow, what **date** do you need it delivered? (e.g., 2026-06-15)\n\nOr I can check what's available:`;
+        response = `Delivery to **${matchedCityName}** confirmed!\n\nNow, what **date** do you need it delivered? (e.g., 2026-06-15)\n\nOr I can check what's available:`;
         response += `\n\n<QUICK_REPLIES>["Tomorrow", "This weekend", "2026-06-15", "As soon as possible"]</QUICK_REPLIES>`;
       }
     }
@@ -293,7 +293,7 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         const text = mcpClient.parseResult<string>(result);
         productsTag = await parseProductsFromMarkdown(text);
         
-        response = `🎁 **Surprise!** I've pulled some completely random, premium wildcard items for you. How about one of these?\n\n${productsTag}`;
+        response = `**Surprise!** I've pulled some completely random, premium wildcard items for you. How about one of these?\n\n${productsTag}`;
         response += `\n\n<QUICK_REPLIES>["Surprise me again!", "Show me cakes instead", "Browse categories"]</QUICK_REPLIES>`;
       }
       // Search intent
@@ -310,10 +310,10 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         productsTag = await parseProductsFromMarkdown(text);
 
         if (productsTag) {
-          response = `Here are some great options I found for "${query}"! 🛍️\n\n${productsTag}\n\nWould you like to know more about any of these, or shall I search for something specific?`;
+          response = `Here are some great options I found for "${query}"! \n\n${productsTag}\n\nWould you like to know more about any of these, or shall I search for something specific?`;
           response += `\n\n<QUICK_REPLIES>["Tell me more about the first one", "Show me more options", "Add to cart", "Search for something else"]</QUICK_REPLIES>`;
         } else {
-          response = `I searched for "${query}" but couldn't find exact matches right now. Let me suggest some alternatives! 🔍\n\n<QUICK_REPLIES>["Show me birthday gifts", "Browse categories", "Show me flowers", "Show me chocolates"]</QUICK_REPLIES>`;
+          response = `I searched for "${query}" but couldn't find exact matches right now. Let me suggest some alternatives!\n\n<QUICK_REPLIES>["Show me birthday gifts", "Browse categories", "Show me flowers", "Show me chocolates"]</QUICK_REPLIES>`;
         }
       }
       
@@ -330,14 +330,14 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         }
 
         if (categories.length > 0) {
-          response = `Here are the categories available on Kapruka! 📋\n\n<CATEGORIES>${JSON.stringify(categories)}</CATEGORIES>\n\n<QUICK_REPLIES>["Show me cakes", "Show me flowers", "Show me gifts", "Show me electronics"]</QUICK_REPLIES>`;
+          response = `Here are the categories available on Kapruka!\n\n<CATEGORIES>${JSON.stringify(categories)}</CATEGORIES>\n\n<QUICK_REPLIES>["Show me cakes", "Show me flowers", "Show me gifts", "Show me electronics"]</QUICK_REPLIES>`;
         } else {
-          response = `Here are the categories available on Kapruka! 📋\n\n${text}\n\n<QUICK_REPLIES>["Show me cakes", "Show me flowers", "Show me gifts", "Show me electronics"]</QUICK_REPLIES>`;
+          response = `Here are the categories available on Kapruka!\n\n${text}\n\n<QUICK_REPLIES>["Show me cakes", "Show me flowers", "Show me gifts", "Show me electronics"]</QUICK_REPLIES>`;
         }
       }
       // Gift mode
       else if (lower.includes('gift') || lower.includes('present') || lower.includes('surprise for') || lower.includes('birthday for')) {
-        response = `🎁 **Gift Mode ON!** Let me help you find the perfect gift.\n\nWho is the lucky person and what's your budget? (e.g. "For my wife, under Rs. 5000")\n\n<QUICK_REPLIES>["Show me popular gifts", "For my mom", "For my girlfriend", "Browse gift categories"]</QUICK_REPLIES>`;
+        response = `**Gift Mode ON!** Let me help you find the perfect gift.\n\nWho is the lucky person and what's your budget? (e.g. "For my wife, under Rs. 5000")\n\n<QUICK_REPLIES>["Show me popular gifts", "For my mom", "For my girlfriend", "Browse gift categories"]</QUICK_REPLIES>`;
       }
       // Tracking Check
       else if (lower.match(/(kap\d+|vimp[a-z0-9]+)/i)) {
@@ -346,14 +346,14 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         try {
            const trackResult = await mcpClient.trackOrder(orderNum);
            const trackText = mcpClient.parseResult<string>(trackResult);
-           response = `📦 Here is the tracking information for order **${orderNum}**:\n\n${trackText}\n\n<QUICK_REPLIES>["Track another order", "Browse products", "Show me gifts"]</QUICK_REPLIES>`;
+           response = `Here is the tracking information for order **${orderNum}**:\n\n${trackText}\n\n<QUICK_REPLIES>["Track another order", "Browse products", "Show me gifts"]</QUICK_REPLIES>`;
         } catch (e) {
            response = `I couldn't find tracking info for **${orderNum}**. Are you sure the number is correct?\n\n<QUICK_REPLIES>["Try again", "Browse products"]</QUICK_REPLIES>`;
         }
       }
       // Tracking Prompt
       else if (lower.includes('track') || lower.includes('order status') || lower.includes('where is my')) {
-        response = `I can help you track your order! 📦 Please provide your Kapruka order number (e.g., VIMP34456CB2).\n\n<QUICK_REPLIES>["I don't have my order number", "Browse products instead"]</QUICK_REPLIES>`;
+        response = `I can help you track your order! Please provide your Kapruka order number (e.g., VIMP34456CB2).\n\n<QUICK_REPLIES>["I don't have my order number", "Browse products instead"]</QUICK_REPLIES>`;
       }
       // Greetings
       else if (lower.match(/^(hi|hello|hey|good morning|good evening|good afternoon|howdy|sup|yo|ayubowan|vanakkam)/)) {
@@ -363,16 +363,16 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         else if (hour < 18) greeting = 'Good afternoon';
         else greeting = 'Good evening';
         
-        response = `${greeting}! 👋 I'm KASA — your personal shopping concierge for Kapruka.com! 🇱🇰\n\nI can find you anything — from electronics and groceries to birthday cakes and flowers. What are you in the mood for?\n\n<QUICK_REPLIES>["Show me trending items", "Birthday gift ideas", "Browse categories", "I need something specific"]</QUICK_REPLIES>`;
+        response = `${greeting}! I'm KASA \u2014 your personal shopping concierge for Kapruka.com!\n\nI can find you anything \u2014 from electronics and groceries to birthday cakes and flowers. What are you in the mood for?\n\n<QUICK_REPLIES>["Show me trending items", "Birthday gift ideas", "Browse categories", "I need something specific"]</QUICK_REPLIES>`;
       }
       // Default
       else {
-        response = `I'd love to help you shop! 🛍️ Kapruka has everything — electronics, groceries, fashion, gifts, and more.\n\nWhat can I find for you? Just describe what you need!\n\n<QUICK_REPLIES>["Show me electronics", "Birthday gifts", "Browse categories", "Track my order"]</QUICK_REPLIES>`;
+        response = `I'd love to help you shop! \u2728 Kapruka has everything \u2014 electronics, groceries, fashion, gifts, and more.\n\nWhat can I find for you? Just describe what you need!\n\n<QUICK_REPLIES>["Show me electronics", "Birthday gifts", "Browse categories", "Track my order"]</QUICK_REPLIES>`;
       }
     }
   } catch (err) {
     console.error('[KASA Fallback] Error:', err);
-    response = `I'm having a moment connecting to the shop. Let me try again! 🔄\n\n<QUICK_REPLIES>["Try again", "Browse categories", "Show me gifts"]</QUICK_REPLIES>`;
+    response = `I'm having a moment connecting to the shop. Let me try again!\n\n<QUICK_REPLIES>["Try again", "Browse categories", "Show me gifts"]</QUICK_REPLIES>`;
   }
 
   return urgencyPrefix + response;
@@ -436,7 +436,7 @@ export async function POST(request: Request) {
     } = body;
 
     if (!message || !sessionId) {
-      return new Response('Please type a message to get started! 😊', {
+      return new Response('Please type a message to get started!', {
         headers: { 'Content-Type': 'text/plain; charset=utf-8' },
       });
     }
@@ -521,7 +521,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('[KASA Chat] Error:', error);
     const msg = error instanceof Error ? error.message : 'Something went wrong';
-    return new Response(`Oops! Something went wrong: ${msg}. Please try again! 🔄`, {
+    return new Response(`Oops! Something went wrong: ${msg}. Please try again!`, {
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     });
   }

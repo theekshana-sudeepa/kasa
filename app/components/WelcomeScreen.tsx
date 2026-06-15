@@ -9,19 +9,19 @@ interface WelcomeScreenProps {
 }
 
 const everydayChips = [
-  { emoji: '📱', label: 'Electronics', query: 'Show me electronics' },
-  { emoji: '🛒', label: 'Groceries', query: 'Show me grocery items' },
-  { emoji: '👗', label: 'Fashion', query: 'Show me fashion items' },
-  { emoji: '🏠', label: 'Home & Living', query: 'Show me home items' },
-  { emoji: '👶', label: 'Baby & Kids', query: 'Show me baby items' },
+  { emoji: '\uD83D\uDCF1', label: 'Electronics', query: 'Show me electronics' },
+  { emoji: '\uD83D\uDED2', label: 'Groceries', query: 'Show me grocery items' },
+  { emoji: '\uD83D\uDC57', label: 'Fashion', query: 'Show me fashion items' },
+  { emoji: '\uD83C\uDFE0', label: 'Home & Living', query: 'Show me home items' },
+  { emoji: '\uD83D\uDC76', label: 'Baby & Kids', query: 'Show me baby items' },
 ];
 
 const giftChips = [
-  { emoji: '🎁', label: 'Gift Ideas', query: 'Show me gift ideas' },
-  { emoji: '💐', label: 'Flowers', query: 'Show me flowers' },
-  { emoji: '🎂', label: 'Cakes', query: 'Show me cakes' },
-  { emoji: '🍫', label: 'Chocolates', query: 'Show me chocolates' },
-  { emoji: '🎲', label: 'Surprise Me', query: 'Surprise me! 🎲' },
+  { emoji: '\uD83C\uDF81', label: 'Gift Ideas', query: 'Show me gift ideas' },
+  { emoji: '\uD83D\uDC90', label: 'Flowers', query: 'Show me flowers' },
+  { emoji: '\uD83C\uDF82', label: 'Cakes', query: 'Show me cakes' },
+  { emoji: '\uD83C\uDF6B', label: 'Chocolates', query: 'Show me chocolates' },
+  { emoji: '\uD83C\uDFB2', label: 'Surprise Me', query: 'Surprise me!' },
 ];
 
 const tagline = "The only AI that shops like a Sri Lankan thinks.";
@@ -37,7 +37,6 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
   useEffect(() => {
     setMounted(true);
     
-    // Typewriter effect for tagline
     let i = 0;
     const type = () => {
       if (i <= tagline.length) {
@@ -45,7 +44,6 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
         i++;
         typingRef.current = setTimeout(type, 35 + Math.random() * 25);
       } else {
-        // Stop cursor after typing
         setTimeout(() => setShowCursor(false), 1500);
       }
     };
@@ -62,33 +60,34 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
     const hour = new Date().getHours();
     
     if (language === 'si') {
-      if (hour < 12) return 'සුභ උදෑසනක්! ☀️ අද මොනවද හොයන්නේ?';
-      if (hour < 18) return 'සුභ දහවලක්! 🌅 මොනවද ගන්න ඕනේ?';
-      return 'සුභ සන්ධ්‍යාවක්! 🌙 රෑට shopping ද?';
+      if (hour < 12) return '\u0DC3\u0DD4\u0DB7 \u0D8B\u0DAF\u0DD1\u0DC3\u0DB1\u0D9A\u0DCA! \u2600\uFE0F \u0D85\u0DAF \u0DB8\u0DDC\u0DB1\u0DC0\u0DAF \u0DC4\u0DDC\u0DBA\u0DB1\u0DCA\u0DB1\u0DD9?';
+      if (hour < 18) return '\u0DC3\u0DD4\u0DB7 \u0DAF\u0DC4\u0DC0\u0DBD\u0D9A\u0DCA! \u0DB8\u0DDC\u0DB1\u0DC0\u0DAF \u0D9C\u0DB1\u0DCA\u0DB1 \u0D94\u0DB1\u0DD3?';
+      return '\u0DC3\u0DD4\u0DB7 \u0DC3\u0DB1\u0DCA\u0DB0\u0DCA\u200D\u0DBA\u0DCF\u0DC0\u0D9A\u0DCA! \u0DBB\u0DD1\u0DA7 shopping \u0DAF?';
     }
     
     if (language === 'tanglish') {
-      if (hour < 12) return 'Good morning! ☀️ Enna thevai innaiku?';
-      if (hour < 18) return 'Good afternoon! 🌅 Shopping pannalama?';
-      return 'Good evening! 🌙 Late night shopping ah?';
+      if (hour < 12) return 'Good morning! Enna thevai innaiku?';
+      if (hour < 18) return 'Good afternoon! Shopping pannalama?';
+      return 'Good evening! Late night shopping ah?';
     }
 
     const festival = getFestivalContext();
     if (festival) {
-      const festivalName = festival.split('—')[0].split('!')[0].trim();
-      return `${festivalName} is near! 🎉 Want something festive?`;
+      // Extract just the festival name before any description
+      const festivalName = festival.split(' is ')[0].split(' \u2014')[0].split('!')[0].trim();
+      return `${festivalName} season! Want something festive?`;
     }
 
     if (userMemory.hasOrderedBefore && userMemory.lastDeliveryCity) {
-      return `Welcome back! 👋 Shopping for ${userMemory.lastDeliveryCity} again?`;
+      return `Welcome back! Shopping for ${userMemory.lastDeliveryCity} again?`;
     }
 
-    if (hour < 6) return "Can't sleep? Let's shop! 🌙";
-    if (hour < 12) return "Good morning! ☀️ What are you looking for today?";
-    if (hour < 14) return "Lunch break shopping? Smart move! 🍽️";
-    if (hour < 18) return "Good afternoon! 🌅 Finding something nice?";
-    if (hour >= 21) return "Late night browsing? I like your style 🌙";
-    return "Good evening! 🌆 What can I find for you?";
+    if (hour < 6) return "Can't sleep? Let's shop!";
+    if (hour < 12) return "Good morning! What are you looking for today?";
+    if (hour < 14) return "Lunch break shopping? Smart move!";
+    if (hour < 18) return "Good afternoon! Finding something nice?";
+    if (hour >= 21) return "Late night browsing? I like your style";
+    return "Good evening! What can I find for you?";
   };
 
   if (!mounted) return null;
@@ -97,12 +96,12 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
-      transition: { staggerChildren: 0.12, delayChildren: 0.1 }
+      transition: { staggerChildren: 0.08, delayChildren: 0.05 }
     }
   };
 
   const itemVariants = {
-    hidden: { y: 24, opacity: 0 },
+    hidden: { y: 20, opacity: 0 },
     visible: {
       y: 0,
       opacity: 1,
@@ -111,7 +110,7 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
   };
 
   const chipVariants = {
-    hidden: { y: 16, opacity: 0, scale: 0.9 },
+    hidden: { y: 12, opacity: 0, scale: 0.92 },
     visible: {
       y: 0,
       opacity: 1,
@@ -127,6 +126,13 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
       initial="hidden"
       animate="visible"
     >
+      {/* Decorative rings behind logo */}
+      <div className="welcome-rings" aria-hidden="true">
+        <div className="welcome-ring welcome-ring-1" />
+        <div className="welcome-ring welcome-ring-2" />
+        <div className="welcome-ring welcome-ring-3" />
+      </div>
+
       {/* Logo */}
       <motion.div 
         className="welcome-logo"
@@ -134,7 +140,7 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
         animate={{ scale: 1, rotate: 0 }}
         transition={{ type: "spring" as const, stiffness: 200, damping: 15, delay: 0.1 }}
       >
-        🪞
+        <span style={{ position: 'relative', zIndex: 1, fontWeight: 900, color: 'white', lineHeight: 1 }}>K</span>
       </motion.div>
       
       {/* Title */}
@@ -155,13 +161,13 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
 
       {/* Everyday Shopping */}
       <motion.div variants={itemVariants} className="welcome-section-label">
-        🛍️ Shop for yourself
+        {'\uD83D\uDED2'} Shop for yourself
       </motion.div>
       
       <motion.div 
         variants={containerVariants}
         className="welcome-chips"
-        style={{ marginBottom: '20px' }}
+        style={{ marginBottom: '24px' }}
       >
         {everydayChips.map((chip, i) => (
           <motion.button
@@ -173,14 +179,14 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
             whileTap={{ scale: 0.95 }}
             onClick={() => onChipClick(chip.query)}
           >
-            {chip.emoji} {chip.label}
+            <span className="chip-emoji">{chip.emoji}</span> {chip.label}
           </motion.button>
         ))}
       </motion.div>
 
       {/* Gifting */}
       <motion.div variants={itemVariants} className="welcome-section-label">
-        🎁 Send a gift
+        {'\uD83C\uDF81'} Send a gift
       </motion.div>
       
       <motion.div 
@@ -197,7 +203,7 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
             whileTap={{ scale: 0.95 }}
             onClick={() => onChipClick(chip.query)}
           >
-            {chip.emoji} {chip.label}
+            <span className="chip-emoji">{chip.emoji}</span> {chip.label}
           </motion.button>
         ))}
       </motion.div>
@@ -205,17 +211,9 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
       {/* Powered by Kapruka */}
       <motion.div 
         variants={itemVariants}
-        style={{
-          marginTop: '32px',
-          fontSize: '11px',
-          color: 'var(--kasa-text-3)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          fontWeight: 500,
-        }}
+        className="welcome-footer"
       >
-        Powered by <strong style={{ color: 'var(--kasa-text-2)' }}>Kapruka.com</strong> 🇱🇰
+        Powered by <strong>Kapruka.com</strong> {'\uD83C\uDDF1\uD83C\uDDF0'}
       </motion.div>
     </motion.div>
   );

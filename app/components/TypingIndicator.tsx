@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import KasaAvatar from './KasaAvatar';
 
 const typingPhrases = [
-  'Browsing the catalog…',
-  'Finding the best picks…',
-  'Checking what\'s trending…',
-  'Almost there…',
-  'Comparing options for you…',
+  'Browsing the catalog\u2026',
+  'Finding the best picks\u2026',
+  'Checking what\'s trending\u2026',
+  'Almost there\u2026',
+  'Comparing options for you\u2026',
 ];
 
 export default function TypingIndicator() {
@@ -22,7 +23,7 @@ export default function TypingIndicator() {
 
   return (
     <div className="typing-indicator">
-      <div className="message-avatar">🪞</div>
+      <KasaAvatar />
       <div className="typing-indicator-inner">
         <div className="typing-dots">
           <div className="typing-dot" />

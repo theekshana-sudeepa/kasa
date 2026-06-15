@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 
 type Theme = 'dark' | 'light';
 
@@ -16,7 +16,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
+    // Read theme preference
     const savedTheme = localStorage.getItem('kasa-theme') as Theme;
     if (savedTheme) {
       setTheme(savedTheme);
@@ -25,21 +25,30 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setTheme('dark');
       document.documentElement.classList.add('dark');
     }
+    // Small delay to allow theme to paint before revealing
+    requestAnimationFrame(() => {
+      setMounted(true);
+    });
   }, []);
 
-  const toggleTheme = () => {
+  const toggleTheme = useCallback(() => {
     setTheme((prev) => {
       const newTheme = prev === 'light' ? 'dark' : 'light';
       localStorage.setItem('kasa-theme', newTheme);
       document.documentElement.classList.toggle('dark', newTheme === 'dark');
       return newTheme;
     });
-  };
+  }, []);
 
-  // Provide the context even during SSR to avoid context missing errors
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      <div style={{ visibility: !mounted ? 'hidden' : 'visible', display: 'contents' }}>
+      <div
+        style={{
+          opacity: mounted ? 1 : 0,
+          transition: 'opacity 0.3s ease-in-out',
+          display: 'contents',
+        }}
+      >
         {children}
       </div>
     </ThemeContext.Provider>

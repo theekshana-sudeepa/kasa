@@ -28,8 +28,8 @@ const EMOJI_MAP: Record<string, string> = {
 };
 
 function getEmoji(slug?: string): string {
-  if (!slug) return '🛍️';
-  return EMOJI_MAP[slug] || EMOJI_MAP[slug.toLowerCase()] || '🛍️';
+  if (!slug) return '\u2728';
+  return EMOJI_MAP[slug] || EMOJI_MAP[slug.toLowerCase()] || '\u2728';
 }
 
 function formatName(name: string): string {

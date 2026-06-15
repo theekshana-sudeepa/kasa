@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { User, Phone, MapPin, Mail, Send, AlertCircle } from 'lucide-react';
 
 interface CheckoutFormProps {
   onSubmit: (details: { name: string; phone: string; address: string; senderName: string; senderEmail: string }) => void;
@@ -15,13 +16,13 @@ export default function CheckoutForm({ onSubmit }: CheckoutFormProps) {
   
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [step, setStep] = useState<1 | 2>(1);
 
   const validate = () => {
     const newErrors: Record<string, string> = {};
     
     if (!name.trim()) newErrors.name = 'Name is required';
     
-    // Sri Lanka phone validation: 07XXXXXXXX or 01XXXXXXXX (10 digits starting with 0)
     const phoneClean = phone.replace(/[\s-]/g, '');
     if (!phoneClean) {
       newErrors.phone = 'Phone is required';
@@ -59,124 +60,153 @@ export default function CheckoutForm({ onSubmit }: CheckoutFormProps) {
     }
   };
 
+  const canProceedToStep2 = name.trim() && phone.trim() && address.trim().length >= 5;
+
   return (
-    <div className="checkout-form-card" style={{
-      background: 'var(--kasa-surface)',
-      border: '1px solid var(--kasa-border)',
-      boxShadow: 'var(--kasa-shadow-sm)',
-      borderRadius: '16px',
-      padding: '20px',
-      marginTop: '10px',
-      maxWidth: '400px'
-    }}>
-      <h3 style={{ margin: '0 0 16px 0', fontSize: '16px', fontWeight: '600' }}>Delivery Details</h3>
-      <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-        
-        {/* Recipient Details */}
-        <div style={{ fontSize: '12px', color: 'var(--kasa-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Recipient</div>
-        
-        <div>
-          <input
-            type="text"
-            placeholder="Recipient Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            disabled={isSubmitting}
-            style={inputStyle(errors.name)}
-          />
-          {errors.name && <div style={errorStyle}>{errors.name}</div>}
+    <div className="checkout-form-card">
+      {/* Step indicator */}
+      <div className="checkout-steps">
+        <div className={`checkout-step ${step >= 1 ? 'active' : ''}`}>
+          <div className="checkout-step-dot">1</div>
+          <span>Recipient</span>
         </div>
-
-        <div>
-          <input
-            type="tel"
-            placeholder="Recipient Phone (e.g. 0771234567)"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            disabled={isSubmitting}
-            style={inputStyle(errors.phone)}
-          />
-          {errors.phone && <div style={errorStyle}>{errors.phone}</div>}
+        <div className="checkout-step-line" />
+        <div className={`checkout-step ${step >= 2 ? 'active' : ''}`}>
+          <div className="checkout-step-dot">2</div>
+          <span>Sender</span>
         </div>
+      </div>
 
-        <div>
-          <textarea
-            placeholder="Complete Delivery Address"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            disabled={isSubmitting}
-            rows={2}
-            style={{ ...inputStyle(errors.address), resize: 'none' }}
-          />
-          {errors.address && <div style={errorStyle}>{errors.address}</div>}
-        </div>
+      <form onSubmit={handleSubmit}>
+        {step === 1 ? (
+          <div className="checkout-section">
+            <div className="checkout-section-title">
+              <User size={14} /> Recipient Details
+            </div>
+            
+            <div className="checkout-field">
+              <div className="checkout-input-wrapper">
+                <User size={14} className="checkout-input-icon" />
+                <input
+                  type="text"
+                  placeholder="Recipient Name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className={`checkout-input ${errors.name ? 'error' : ''}`}
+                  disabled={isSubmitting}
+                />
+              </div>
+              {errors.name && <div className="checkout-error"><AlertCircle size={12} /> {errors.name}</div>}
+            </div>
 
-        {/* Sender Details */}
-        <div style={{ fontSize: '12px', color: 'var(--kasa-text-3)', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '8px' }}>Sender (You)</div>
-        
-        <div>
-          <input
-            type="text"
-            placeholder="Your Name"
-            value={senderName}
-            onChange={(e) => setSenderName(e.target.value)}
-            disabled={isSubmitting}
-            style={inputStyle(errors.senderName)}
-          />
-          {errors.senderName && <div style={errorStyle}>{errors.senderName}</div>}
-        </div>
+            <div className="checkout-field">
+              <div className="checkout-input-wrapper">
+                <Phone size={14} className="checkout-input-icon" />
+                <input
+                  type="tel"
+                  placeholder="Phone (e.g. 0771234567)"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className={`checkout-input ${errors.phone ? 'error' : ''}`}
+                  disabled={isSubmitting}
+                />
+              </div>
+              {errors.phone && <div className="checkout-error"><AlertCircle size={12} /> {errors.phone}</div>}
+            </div>
 
-        <div>
-          <input
-            type="email"
-            placeholder="Your Email"
-            value={senderEmail}
-            onChange={(e) => setSenderEmail(e.target.value)}
-            disabled={isSubmitting}
-            style={inputStyle(errors.senderEmail)}
-          />
-          {errors.senderEmail && <div style={errorStyle}>{errors.senderEmail}</div>}
-        </div>
+            <div className="checkout-field">
+              <div className="checkout-input-wrapper" style={{ alignItems: 'flex-start', paddingTop: '4px' }}>
+                <MapPin size={14} className="checkout-input-icon" />
+                <textarea
+                  placeholder="Complete Delivery Address"
+                  value={address}
+                  onChange={(e) => setAddress(e.target.value)}
+                  className={`checkout-input ${errors.address ? 'error' : ''}`}
+                  disabled={isSubmitting}
+                  rows={2}
+                  style={{ resize: 'none' }}
+                />
+              </div>
+              {errors.address && <div className="checkout-error"><AlertCircle size={12} /> {errors.address}</div>}
+            </div>
 
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          style={{
-            background: 'var(--kasa-primary-500)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '8px',
-            padding: '12px',
-            fontWeight: '600',
-            cursor: isSubmitting ? 'not-allowed' : 'pointer',
-            opacity: isSubmitting ? 0.7 : 1,
-            marginTop: '8px',
-            transition: 'opacity 0.2s',
-            boxShadow: 'var(--kasa-shadow-sm)'
-          }}
-        >
-          {isSubmitting ? 'Confirming...' : 'Confirm Details'}
-        </button>
+            <button
+              type="button"
+              className="checkout-next-btn"
+              onClick={() => {
+                if (canProceedToStep2) setStep(2);
+                else {
+                  const newErrors: Record<string, string> = {};
+                  if (!name.trim()) newErrors.name = 'Name is required';
+                  if (!phone.trim()) newErrors.phone = 'Phone is required';
+                  if (!address.trim() || address.trim().length < 5) newErrors.address = 'Enter a complete address';
+                  setErrors(newErrors);
+                }
+              }}
+              disabled={!canProceedToStep2}
+            >
+              Continue to Sender Details
+            </button>
+          </div>
+        ) : (
+          <div className="checkout-section">
+            <div className="checkout-section-title">
+              <Mail size={14} /> Sender Details (You)
+            </div>
+
+            <div className="checkout-field">
+              <div className="checkout-input-wrapper">
+                <User size={14} className="checkout-input-icon" />
+                <input
+                  type="text"
+                  placeholder="Your Name"
+                  value={senderName}
+                  onChange={(e) => setSenderName(e.target.value)}
+                  className={`checkout-input ${errors.senderName ? 'error' : ''}`}
+                  disabled={isSubmitting}
+                />
+              </div>
+              {errors.senderName && <div className="checkout-error"><AlertCircle size={12} /> {errors.senderName}</div>}
+            </div>
+
+            <div className="checkout-field">
+              <div className="checkout-input-wrapper">
+                <Mail size={14} className="checkout-input-icon" />
+                <input
+                  type="email"
+                  placeholder="Your Email"
+                  value={senderEmail}
+                  onChange={(e) => setSenderEmail(e.target.value)}
+                  className={`checkout-input ${errors.senderEmail ? 'error' : ''}`}
+                  disabled={isSubmitting}
+                />
+              </div>
+              {errors.senderEmail && <div className="checkout-error"><AlertCircle size={12} /> {errors.senderEmail}</div>}
+            </div>
+
+            <div className="checkout-btn-row">
+              <button
+                type="button"
+                className="checkout-back-btn"
+                onClick={() => setStep(1)}
+              >
+                Back
+              </button>
+              <button
+                type="submit"
+                className="checkout-submit-btn"
+                disabled={isSubmitting}
+              >
+                {isSubmitting ? (
+                  <>Confirming<span className="checkout-spinner" /></>
+                ) : (
+                  <><Send size={14} /> Confirm Details</>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
       </form>
     </div>
   );
 }
-
-const inputStyle = (hasError?: string) => ({
-  width: '100%',
-  padding: '10px 12px',
-  borderRadius: '8px',
-  border: hasError ? '1px solid var(--kasa-error)' : '1px solid var(--kasa-border)',
-  background: 'var(--kasa-surface-2)',
-  color: 'var(--kasa-text)',
-  fontSize: '14px',
-  outline: 'none',
-  transition: 'border-color 0.2s',
-  boxSizing: 'border-box' as const
-});
-
-const errorStyle = {
-  color: '#ef4444',
-  fontSize: '12px',
-  marginTop: '4px'
-};

@@ -21,7 +21,8 @@ import GroupGiftLink from './components/GroupGiftLink';
 import GiftMessageCard from './components/GiftMessageCard';
 import type { ChatMessage, Product } from './lib/mcp/types';
 import { parseAssistantResponse } from './lib/ai/response-parser';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, Gift, Package, LayoutGrid, ShoppingCart } from 'lucide-react';
+import KasaAvatar from './components/KasaAvatar';
 
 export default function Home() {
   const {
@@ -170,7 +171,7 @@ export default function Home() {
       addMessage({
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: "Aiyo! 💔 Something went wrong on my end. Make sure an API key is set in .env.local, or just try again — I'm resilient like that! 🙏",
+        content: "Aiyo! Something went wrong on my end. Make sure an API key is set in .env.local, or just try again — I'm resilient like that!",
         timestamp: Date.now(),
         quickReplies: ['Try again', 'Browse categories'],
       });
@@ -291,7 +292,7 @@ export default function Home() {
               ) : (
                 <div>
                   <div className="message message-assistant">
-                    <div className="message-avatar">🪞</div>
+                    <KasaAvatar />
                     <div>
                       <div className="message-bubble">
                         <div className="message-content">
@@ -441,16 +442,16 @@ export default function Home() {
             className={`chat-input-action ${giftMode ? 'active' : ''}`} 
             onClick={() => { toggleGiftMode(); }}
           >
-            {giftMode ? '🎁 Gift ON' : '🎁 Gift'}
+            <Gift size={14} /> {giftMode ? 'Gift ON' : 'Gift'}
           </button>
           <button className="chat-input-action" onClick={() => sendMessage('Track my order')}>
-            📦 Track
+            <Package size={14} /> Track
           </button>
           <button className="chat-input-action" onClick={() => sendMessage('Browse categories')}>
-            📋 Browse
+            <LayoutGrid size={14} /> Browse
           </button>
           <button className="chat-input-action" onClick={() => setCartDrawerOpen(true)}>
-            🛒 Cart ({cart.reduce((s, i) => s + i.quantity, 0)})
+            <ShoppingCart size={14} /> Cart ({cart.reduce((s, i) => s + i.quantity, 0)})
           </button>
         </div>
       </div>
