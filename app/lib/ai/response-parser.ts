@@ -6,6 +6,7 @@ import type {
   CartItem,
   Category,
 } from '../mcp/types';
+import { enforceHumanTone } from './tone-enforcement';
 
 export interface ParsedResponse {
   text: string;
@@ -122,6 +123,9 @@ export function parseAssistantResponse(rawText: string): ParsedResponse {
 
   // Clean excessive whitespace
   text = text.replace(/\n{3,}/g, '\n\n').trim();
+
+  // Enforce human tone (remove generic patterns)
+  text = enforceHumanTone(text);
 
   const result: ParsedResponse = { text, checkoutForm, showCartSummary };
 
