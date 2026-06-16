@@ -23,6 +23,7 @@ import type { ChatMessage, Product } from './lib/mcp/types';
 import { parseAssistantResponse } from './lib/ai/response-parser';
 import { ChevronDown, Gift, Package, LayoutGrid, ShoppingCart } from 'lucide-react';
 import KasaAvatar from './components/KasaAvatar';
+import { t } from './lib/i18n/translations';
 
 export default function Home() {
   const {
@@ -414,11 +415,7 @@ export default function Home() {
           <textarea
             ref={inputRef}
             className="chat-input-field"
-            placeholder={
-              language === 'si' ? 'ඔබේ පණිවිඩය ටයිප් කරන්න...'
-              : language === 'tanglish' ? 'Type pannunga...'
-              : 'What are you looking for?'
-            }
+            placeholder={t('input.placeholder', language)}
             value={input}
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
@@ -438,20 +435,20 @@ export default function Home() {
           </button>
         </div>
         <div className="chat-input-actions">
-          <button 
-            className={`chat-input-action ${giftMode ? 'active' : ''}`} 
+          <button
+            className={`chat-input-action ${giftMode ? 'active' : ''}`}
             onClick={() => { toggleGiftMode(); }}
           >
-            <Gift size={14} /> {giftMode ? 'Gift ON' : 'Gift'}
+            <Gift size={14} /> {giftMode ? t('input.giftOn', language) : t('input.gift', language)}
           </button>
           <button className="chat-input-action" onClick={() => sendMessage('Track my order')}>
-            <Package size={14} /> Track
+            <Package size={14} /> {t('input.track', language)}
           </button>
           <button className="chat-input-action" onClick={() => sendMessage('Browse categories')}>
-            <LayoutGrid size={14} /> Browse
+            <LayoutGrid size={14} /> {t('input.browse', language)}
           </button>
           <button className="chat-input-action" onClick={() => setCartDrawerOpen(true)}>
-            <ShoppingCart size={14} /> Cart ({cart.reduce((s, i) => s + i.quantity, 0)})
+            <ShoppingCart size={14} /> {t('input.cart', language)} ({cart.reduce((s, i) => s + i.quantity, 0)})
           </button>
         </div>
       </div>

@@ -3,6 +3,7 @@
 import { useChatStore } from '../lib/store/chat-store';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Minus, Plus, Trash2, ShoppingBag, Package } from 'lucide-react';
+import { t } from '../lib/i18n/translations';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -11,7 +12,7 @@ interface CartDrawerProps {
 }
 
 export default function CartDrawer({ isOpen, onClose, onCheckout }: CartDrawerProps) {
-  const { cart, removeFromCart, updateCartQuantity } = useChatStore();
+  const { cart, removeFromCart, updateCartQuantity, language } = useChatStore();
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   return (
@@ -68,7 +69,7 @@ export default function CartDrawer({ isOpen, onClose, onCheckout }: CartDrawerPr
             alignItems: 'center',
             gap: '8px',
           }}>
-            <ShoppingBag size={20} /> Your Cart
+            <ShoppingBag size={20} /> {t('cart.title', language)}
           </h2>
           <button
             onClick={onClose}
@@ -98,8 +99,8 @@ export default function CartDrawer({ isOpen, onClose, onCheckout }: CartDrawerPr
               color: 'var(--kasa-text-3)',
             }}>
               <Package size={48} strokeWidth={1} style={{ marginBottom: '12px', opacity: 0.4 }} />
-              <p style={{ fontWeight: 600, marginBottom: '4px' }}>Your cart is empty</p>
-              <p style={{ fontSize: '13px' }}>Start shopping to add items!</p>
+              <p style={{ fontWeight: 600, marginBottom: '4px' }}>{t('cart.empty', language)}</p>
+              <p style={{ fontSize: '13px' }}>{t('cart.startShopping', language)}</p>
             </div>
           ) : (
             cart.map((item, idx) => (
@@ -229,11 +230,11 @@ export default function CartDrawer({ isOpen, onClose, onCheckout }: CartDrawerPr
               marginBottom: '14px',
               color: 'var(--kasa-text)',
             }}>
-              <span>Total</span>
+              <span>{t('cart.total', language)}</span>
               <span>Rs. {total.toLocaleString()}</span>
             </div>
             <button className="cart-summary-checkout-btn" onClick={onCheckout}>
-              ✨ Proceed to Checkout
+              ✨ {t('cart.checkout', language)}
             </button>
           </div>
         )}
