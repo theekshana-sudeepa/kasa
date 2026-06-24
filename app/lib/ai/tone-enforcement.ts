@@ -1,8 +1,8 @@
 /**
- * TONE ENFORCEMENT LAYER
+ * KASA v4.0 — Tone Enforcement v2
  *
- * Scans AI responses for robotic patterns and flags them for
- * developer review. Ensures KASA always feels human, warm, and conversational.
+ * Now with AUTO-FIX — doesn't just detect robotic patterns, actively replaces them.
+ * Also enforces response length limits and prevents duplicate suggestions.
  */
 
 const ROBOTIC_PATTERNS = [
@@ -34,16 +34,46 @@ const HUMAN_SIGNALS = [
   /amma/i,
   /anna/i,
   /punchi/i,
+  /aney/i,
+  /kohomada/i,
+  /mokakda/i,
+  /epa/i,
+  /patta/i,
   // Contractions show conversational tone
   /don't|won't|can't|it's|that's|here's|let's/i,
   // Conversational starters
-  /^(So|Actually|Hmm|Well|Look)/i,
+  /^(So|Actually|Hmm|Well|Look|Okay|Right)/i,
   // Direct recommendations (not just options)
   /My (honest )?pick|I'd go with|Trust me|Here's why/i,
   // Personality
   /😄|😊|💔|🎂|✨|👍/,
   // Cultural references
   /Sri Lanka|Sri Lankan|Colombo|fest|Avurudu|Vesak|Poson/i,
+];
+
+// ── Auto-fix replacements ──
+const REPLACEMENTS: Array<{ pattern: RegExp; replacement: string }> = [
+  { pattern: /^I'd be happy to help you with/i, replacement: "Let me help you with" },
+  { pattern: /^Here are the results for your search/i, replacement: "Found these for you" },
+  { pattern: /^Here are (\d+) great/i, replacement: "Check out these" },
+  { pattern: /^Here are some /i, replacement: "Check out these " },
+  { pattern: /^Here is a /i, replacement: "Got a " },
+  { pattern: /^Here's what I found/i, replacement: "Found some great options" },
+  { pattern: /^Certainly!/i, replacement: "Sure!" },
+  { pattern: /^Indeed,/i, replacement: "Yeah," },
+  { pattern: /^I can help you with that!/i, replacement: "On it!" },
+  { pattern: /^Great question!/i, replacement: "" },
+  { pattern: /^Excellent choice!/i, replacement: "Good taste!" },
+  { pattern: /^Based on your requirements,/i, replacement: "Given what you need," },
+  { pattern: /^Based on your request,/i, replacement: "" },
+  { pattern: /^In response to your query,/i, replacement: "" },
+  { pattern: /^Thank you for your patience\./i, replacement: "" },
+  // Trailing robotic patterns
+  { pattern: /\. Hope this helps!?$/i, replacement: "." },
+  { pattern: /\. Let me know if you need anything else!?$/i, replacement: "." },
+  { pattern: /\. Feel free to ask if you have any (?:more |other )?questions!?$/i, replacement: "." },
+  { pattern: /\. If you have any (?:more |other )?questions.*$/i, replacement: "." },
+  { pattern: /\. Is there anything else I can help you with\??$/i, replacement: "." },
 ];
 
 export function analyzeResponseTone(response: string): {
@@ -53,11 +83,11 @@ export function analyzeResponseTone(response: string): {
   warnings: string[];
 } {
   const roboticMatches = ROBOTIC_PATTERNS
-    .map((pattern, idx) => pattern.test(response) ? pattern.toString() : null)
+    .map((pattern) => (pattern.test(response) ? pattern.toString() : null))
     .filter(Boolean) as string[];
 
   const humanMatches = HUMAN_SIGNALS
-    .map((signal) => signal.test(response) ? 1 : 0)
+    .map((signal) => (signal.test(response) ? 1 : 0))
     .reduce((a, b) => a + b, 0);
 
   const warnings: string[] = [];
@@ -71,7 +101,7 @@ export function analyzeResponseTone(response: string): {
   }
 
   // Count emoji
-  const emojiCount = (response.match(/[😀-🙏🎁🎂🌹💐💐💔✨]/g) || []).length;
+  const emojiCount = (response.match(/[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2702}-\u{27B0}\u{FE00}-\u{FE0F}\u{1F900}-\u{1F9FF}]/gu) || []).length;
   if (emojiCount > 2) {
     warnings.push(`Too many emoji (${emojiCount}). Max 2 recommended.`);
   }
@@ -84,22 +114,41 @@ export function analyzeResponseTone(response: string): {
   };
 }
 
+/**
+ * Enforce human tone — actively replaces robotic patterns.
+ */
 export function enforceHumanTone(response: string): string {
   let result = response;
 
-  // Replace generic openings
-  result = result.replace(
-    /^I'd be happy to help you with/i,
-    "Let me help you with"
-  );
-  result = result.replace(
-    /^Here are the results for your search/i,
-    "Found these for you"
-  );
-  result = result.replace(
-    /^Here are (\d+) great/i,
-    "Check out these"
-  );
+  // Apply all auto-fix replacements
+  for (const { pattern, replacement } of REPLACEMENTS) {
+    result = result.replace(pattern, replacement);
+  }
 
-  return result;
+  // Clean up empty leading lines
+  result = result.replace(/^\s*\n+/, '');
+
+  // Remove consecutive identical sentences
+  const sentences = result.split(/(?<=[.!?])\s+/);
+  const uniqueSentences: string[] = [];
+  for (const sentence of sentences) {
+    const trimmed = sentence.trim();
+    if (trimmed && !uniqueSentences.includes(trimmed)) {
+      uniqueSentences.push(trimmed);
+    }
+  }
+  result = uniqueSentences.join(' ');
+
+  return result.trim();
+}
+
+/**
+ * Check for duplicate suggestions in consecutive messages.
+ */
+export function deduplicateSuggestions(
+  currentSuggestions: string[],
+  previousSuggestions: string[]
+): string[] {
+  const prevSet = new Set(previousSuggestions.map((s) => s.toLowerCase()));
+  return currentSuggestions.filter((s) => !prevSet.has(s.toLowerCase()));
 }

@@ -1,5 +1,6 @@
 import type { CartItem, Language } from '../mcp/types';
 import type { ExtractedIntent } from './intent-extractor';
+import type { ConversationMemory } from '../mcp/types';
 
 interface SriLankanFestival {
   name: string;
@@ -92,6 +93,33 @@ const SRI_LANKAN_FESTIVALS: SriLankanFestival[] = [
     context:
       'Ramadan/Eid season — suggest dates, food hampers, clothing, prayer items, and Eid gift packages.',
   },
+  {
+    name: 'Thai Pongal',
+    startMonth: 1,
+    startDay: 10,
+    endMonth: 1,
+    endDay: 17,
+    context:
+      'Thai Pongal is near! Suggest traditional foods, rice cookers, sweet treats, and festive gift hampers.',
+  },
+  {
+    name: 'Independence Day',
+    startMonth: 2,
+    startDay: 1,
+    endMonth: 2,
+    endDay: 5,
+    context:
+      'Sri Lanka Independence Day (Feb 4) — suggest patriotic gifts, national flag items, and celebration hampers.',
+  },
+  {
+    name: "Children's Day",
+    startMonth: 10,
+    startDay: 1,
+    endMonth: 10,
+    endDay: 3,
+    context:
+      "Children's Day is coming! Suggest toys, educational items, books, games, and fun gift sets for kids.",
+  },
 ];
 
 export function getFestivalContext(): string | null {
@@ -153,7 +181,8 @@ export function buildSystemPrompt(
   cart: CartItem[],
   deliveryCity: string | null,
   festivalContext: string | null,
-  extractedIntent: ExtractedIntent | null = null
+  extractedIntent: ExtractedIntent | null = null,
+  memory: ConversationMemory | null = null
 ): string {
   const langInstructions = getLanguageInstructions(language);
   const cartSummary = formatCartSummary(cart);
@@ -198,6 +227,16 @@ User is stressed/urgent. Skip questions, go straight to curated picks. Provide s
       break;
   }
 
+  // v4.0 — COMPARISON sub-prompt
+  if (extractedIntent && (extractedIntent.is_followup || intent === 'SEARCH')) {
+    intentSubPrompt += `
+[COMPARISON AWARENESS]
+If the user asks to compare products, output a <COMPARISON> tag with the product data instead of <PRODUCTS>.
+Always give your verdict: "My pick would be X because..."
+Focus on the single most decisive differentiator.
+`;
+  }
+
   // Build emotional context block from extracted intent
   let emotionalContextBlock = '';
   if (extractedIntent && extractedIntent.emotion !== 'neutral') {
@@ -240,7 +279,13 @@ CRITICAL INSTRUCTION: Your response MUST reflect this emotional context.
 - Acknowledge the emotional situation naturally (not robotically).
 - Then transition smoothly to helping them with the right products.
 - Use the products from the tool results — the search queries have already been optimized for this emotional context.
+
+MOOD TAG (REQUIRED): Based on the emotion, add this tag at the END of your response:
+<MOOD>${extractedIntent.mood || 'neutral'}</MOOD>
 `;
+  } else {
+    // Even for neutral emotions, emit mood tag
+    emotionalContextBlock = `\n<MOOD>neutral</MOOD>\n`;
   }
 
   return `SYSTEM: You are KASA (කැස) — Sri Lanka's most intelligent personal shopping AI,
@@ -467,6 +512,21 @@ Festival context: ${festivalContext || 'None active'}
 User language: ${language}
 Cart: ${cartSummary}
 Gift mode: ${giftMode ? 'ON' : 'OFF'}
-Delivery city (if known): ${deliveryCity || 'Not set'}
+Delivery city (if known): ${deliveryCity || memory?.deliveryCity || 'Not set'}
+${memory ? `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+## 🧠 CONVERSATION MEMORY (accumulated from this session)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${memory.budget ? `Budget: Under Rs. ${memory.budget.max.toLocaleString()}` : ''}
+${memory.occasion ? `Occasion: ${memory.occasion}` : ''}
+${memory.giftTarget ? `Gift for: ${memory.giftTarget}` : ''}
+${memory.deliveryDate ? `Delivery date: ${memory.deliveryDate}` : ''}
+${memory.preferredCategories.length > 0 ? `Interested in: ${memory.preferredCategories.join(', ')}` : ''}
+${memory.rejectedProducts.length > 0 ? `Previously rejected: ${memory.rejectedProducts.slice(-3).join(', ')} — DO NOT suggest similar items` : ''}
+${memory.recipientInfo ? `Recipient: ${memory.recipientInfo.name} (${memory.recipientInfo.phone})` : ''}
+${memory.senderInfo ? `Sender: ${memory.senderInfo.name} (${memory.senderInfo.email})` : ''}
+
+CRITICAL: Use this memory. Never ask for information that's already recorded above.
+` : ''}
 `;
 }

@@ -34,6 +34,32 @@ export interface ExtractedIntent {
   budget?: { max: number; currency: string };
   /** Delivery urgency */
   urgency: 'same_day' | 'next_day' | 'this_week' | 'no_rush' | 'unknown';
+  // v4.0 additions
+  /** Confidence score 0-1 on the extraction accuracy */
+  confidence: number;
+  /** UI mood signal mapped from emotion */
+  mood: 'neutral' | 'warm' | 'excited' | 'urgent' | 'romantic' | 'calm';
+  /** Whether the user is rejecting current suggestions */
+  is_rejection: boolean;
+  /** Whether this is a follow-up about a previously shown item */
+  is_followup: boolean;
+}
+
+/**
+ * Map emotional state to a UI mood for the MoodBackground component.
+ */
+export function emotionToMood(emotion: ExtractedIntent['emotion']): ExtractedIntent['mood'] {
+  const moodMap: Record<string, ExtractedIntent['mood']> = {
+    sad: 'warm',
+    urgent: 'urgent',
+    excited: 'excited',
+    anxious: 'urgent',
+    angry: 'warm',
+    romantic: 'romantic',
+    grateful: 'warm',
+    neutral: 'neutral',
+  };
+  return moodMap[emotion] || 'neutral';
 }
 
 const INTENT_EXTRACTION_PROMPT = `You are KASA's Intent Intelligence Engine. Your job is to DEEPLY understand what a user really means and needs — especially when they express emotions, context, or vague desires.
@@ -126,9 +152,10 @@ export async function extractIntent(
 
     const parsed = JSON.parse(jsonStr);
 
+    const emotion = parsed.emotion || 'neutral';
     // Validate and return with defaults
     return {
-      emotion: parsed.emotion || 'neutral',
+      emotion,
       shopping_intent: parsed.shopping_intent || '',
       search_queries: Array.isArray(parsed.search_queries) ? parsed.search_queries.slice(0, 3) : [],
       occasion: parsed.occasion || 'none',
@@ -138,6 +165,10 @@ export async function extractIntent(
       intent_category: parsed.intent_category || 'SEARCH',
       budget: parsed.budget || undefined,
       urgency: parsed.urgency || 'unknown',
+      confidence: 0.85, // AI-extracted intents have high confidence
+      mood: emotionToMood(emotion),
+      is_rejection: /\b(no|nah|not that|something else|different|don't like|skip)\b/i.test(message),
+      is_followup: /\b(first|second|third|that one|this one|tell me more|more about)\b/i.test(message),
     };
   } catch (err) {
     console.warn('[KASA Intent] AI extraction failed, using heuristic fallback:', err);
@@ -269,6 +300,55 @@ export function extractIntentFallback(message: string): ExtractedIntent {
       queries: ['housewarming gift', 'home decor', 'gift hamper'],
       intent: 'housewarming gift',
     },
+    // v4.0 — Expanded emotional patterns
+    {
+      pattern: /get well|sick|hospital|recover|surgery|unwell/i,
+      emotion: 'sad',
+      tone: 'empathetic',
+      occasion: 'get well',
+      queries: ['fruit basket', 'get well gift', 'health hamper'],
+      intent: 'get well gift',
+    },
+    {
+      pattern: /engag|proposal|ring|she said yes|he said yes/i,
+      emotion: 'excited',
+      tone: 'excited',
+      occasion: 'engagement',
+      queries: ['engagement gift', 'champagne', 'celebration hamper'],
+      intent: 'engagement gift',
+    },
+    {
+      pattern: /graduat|convocation|degree|passed exam/i,
+      emotion: 'excited',
+      tone: 'excited',
+      occasion: 'graduation',
+      queries: ['graduation gift', 'pen set', 'gift hamper'],
+      intent: 'graduation gift',
+    },
+    {
+      pattern: /farewell|goodbye|leaving|going abroad|migration/i,
+      emotion: 'sad',
+      tone: 'warm',
+      occasion: 'farewell',
+      queries: ['farewell gift', 'memory album', 'gift hamper'],
+      intent: 'farewell gift',
+    },
+    {
+      pattern: /retir|retiring|retirement/i,
+      emotion: 'grateful',
+      tone: 'warm',
+      occasion: 'retirement',
+      queries: ['retirement gift', 'premium gift', 'watch'],
+      intent: 'retirement gift',
+    },
+    {
+      pattern: /pongal|thai pongal/i,
+      emotion: 'excited',
+      tone: 'warm',
+      occasion: 'pongal',
+      queries: ['pongal gift', 'traditional sweets', 'rice cooker'],
+      intent: 'pongal gift',
+    },
   ];
 
   // Check emotional patterns
@@ -380,6 +460,24 @@ export function extractIntentFallback(message: string): ExtractedIntent {
     };
   }
 
+  // v4.0 — Rejection detection
+  const is_rejection = /\b(no|nah|not that|something else|different|don't like|skip|another|other)\b/i.test(lower);
+
+  // v4.0 — Follow-up detection
+  const is_followup = /\b(first|second|third|that one|this one|tell me more|more about|more info|details about)\b/i.test(lower);
+
+  // Calculate confidence based on how many signals matched
+  const signalCount = [
+    emotion !== 'neutral',
+    is_shopping,
+    search_queries.length > 0,
+    occasion !== 'none',
+    gift_target !== 'unknown',
+    urgency !== 'unknown',
+    budget !== undefined,
+  ].filter(Boolean).length;
+  const confidence = Math.min(1, 0.3 + signalCount * 0.1);
+
   return {
     emotion,
     shopping_intent,
@@ -391,5 +489,9 @@ export function extractIntentFallback(message: string): ExtractedIntent {
     intent_category,
     budget,
     urgency,
+    confidence,
+    mood: emotionToMood(emotion),
+    is_rejection,
+    is_followup,
   };
 }

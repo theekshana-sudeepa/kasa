@@ -1,3 +1,10 @@
+/**
+ * KASA v4.0 — Response Parser
+ * 
+ * Parses AI responses to extract structured data from custom tags.
+ * v4.0 adds: MOOD, SMART_SUGGESTIONS, KASA_PICK metadata in products.
+ */
+
 import type {
   Product,
   DeliveryInfo,
@@ -5,6 +12,8 @@ import type {
   TrackingInfo,
   CartItem,
   Category,
+  SmartSuggestion,
+  Mood,
 } from '../mcp/types';
 import { enforceHumanTone } from './tone-enforcement';
 
@@ -23,6 +32,9 @@ export interface ParsedResponse {
   tenSecondDecision?: Product;
   groupGift?: { goal: number; productName: string };
   giftMessage?: string;
+  // v4.0
+  mood?: Mood;
+  smartSuggestions?: SmartSuggestion[];
 }
 
 function safeParse<T>(raw: string): T | null {
@@ -37,7 +49,6 @@ function extractTag<T>(
   text: string,
   tagName: string
 ): { data: T | null; cleaned: string } {
-  // Use a simple string search approach that's more reliable than regex
   const openTag = `<${tagName}>`;
   const closeTag = `</${tagName}>`;
 
@@ -48,10 +59,9 @@ function extractTag<T>(
 
   const contentStart = startIdx + openTag.length;
   const endIdx = text.indexOf(closeTag, contentStart);
-  
+
   if (endIdx === -1) {
     // Tag is open but not closed yet (streaming).
-    // Hide the incomplete tag and its contents from the cleaned text.
     const cleaned = text.slice(0, startIdx).trim();
     return { data: null, cleaned };
   }
@@ -61,6 +71,35 @@ function extractTag<T>(
   const cleaned = (text.slice(0, startIdx) + text.slice(endIdx + closeTag.length)).trim();
 
   return { data: parsed, cleaned };
+}
+
+/**
+ * Extract a simple text tag (not JSON).
+ */
+function extractTextTag(
+  text: string,
+  tagName: string
+): { value: string | null; cleaned: string } {
+  const openTag = `<${tagName}>`;
+  const closeTag = `</${tagName}>`;
+
+  const startIdx = text.indexOf(openTag);
+  if (startIdx === -1) {
+    return { value: null, cleaned: text };
+  }
+
+  const contentStart = startIdx + openTag.length;
+  const endIdx = text.indexOf(closeTag, contentStart);
+
+  if (endIdx === -1) {
+    const cleaned = text.slice(0, startIdx).trim();
+    return { value: null, cleaned };
+  }
+
+  const value = text.slice(contentStart, endIdx).trim();
+  const cleaned = (text.slice(0, startIdx) + text.slice(endIdx + closeTag.length)).trim();
+
+  return { value, cleaned };
 }
 
 export function parseAssistantResponse(rawText: string): ParsedResponse {
@@ -96,6 +135,14 @@ export function parseAssistantResponse(rawText: string): ParsedResponse {
   const groupGiftResult = extractTag<{ goal: number; productName: string }>(text, 'GROUP_GIFT');
   text = groupGiftResult.cleaned;
 
+  // v4.0 — Mood tag (simple text, not JSON)
+  const moodResult = extractTextTag(text, 'MOOD');
+  text = moodResult.cleaned;
+
+  // v4.0 — Smart suggestions
+  const smartSuggestionsResult = extractTag<SmartSuggestion[]>(text, 'SMART_SUGGESTIONS');
+  text = smartSuggestionsResult.cleaned;
+
   // Extract gift message (plain text, not JSON)
   let giftMessage: string | undefined;
   const gmOpen = text.indexOf('<GIFT_MESSAGE>');
@@ -104,14 +151,13 @@ export function parseAssistantResponse(rawText: string): ParsedResponse {
     giftMessage = text.slice(gmOpen + '<GIFT_MESSAGE>'.length, gmClose).trim();
     text = (text.slice(0, gmOpen) + text.slice(gmClose + '</GIFT_MESSAGE>'.length)).trim();
   } else if (gmOpen !== -1) {
-    // Streaming: tag opened but not closed yet
     text = text.slice(0, gmOpen).trim();
   }
 
   let checkoutForm = false;
   if (text.includes('<CHECKOUT_FORM/>') || text.includes('<CHECKOUT_FORM>')) {
     checkoutForm = true;
-    text = text.replace(/<CHECKOUT_FORM\/?>.*?<\/?CHECKOUT_FORM>/g, '');
+    text = text.replace(/<CHECKOUT_FORM\/?>[^<]*<\/?CHECKOUT_FORM>/g, '');
     text = text.replace(/<CHECKOUT_FORM\/?>/g, '');
   }
 
@@ -171,6 +217,24 @@ export function parseAssistantResponse(rawText: string): ParsedResponse {
 
   if (giftMessage) {
     result.giftMessage = giftMessage;
+  }
+
+  // v4.0 — Mood
+  if (moodResult.value) {
+    const validMoods = ['neutral', 'warm', 'excited', 'urgent', 'romantic', 'calm'];
+    const moodLower = moodResult.value.toLowerCase() as Mood;
+    if (validMoods.includes(moodLower)) {
+      result.mood = moodLower;
+    }
+  }
+
+  // v4.0 — Smart suggestions
+  if (
+    smartSuggestionsResult.data &&
+    Array.isArray(smartSuggestionsResult.data) &&
+    smartSuggestionsResult.data.length > 0
+  ) {
+    result.smartSuggestions = smartSuggestionsResult.data;
   }
 
   return result;

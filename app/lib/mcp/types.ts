@@ -10,6 +10,10 @@ export interface Product {
   category?: string;
   rating?: number;
   variants?: string[];
+  // v4.0 — Product Intelligence
+  kasaPick?: boolean;
+  matchReason?: string;
+  rankScore?: number;
 }
 
 export interface CartItem {
@@ -78,6 +82,72 @@ export interface SessionState {
   delivery_date: string | null;
 }
 
+// ── v4.0 — Smart Suggestion System ──────────────────────
+export interface SmartSuggestion {
+  text: string;
+  emoji: string;
+  type: 'action' | 'search' | 'navigate';
+}
+
+// ── v4.0 — Conversation Memory ──────────────────────────
+export interface ConversationMemory {
+  deliveryCity: string | null;
+  deliveryDate: string | null;
+  budget: { max: number; currency: string } | null;
+  occasion: string | null;
+  giftTarget: string | null;
+  preferredCategories: string[];
+  rejectedProducts: string[];
+  mentionedNames: string[];
+  senderInfo: { name: string; email: string } | null;
+  recipientInfo: { name: string; phone: string; address: string } | null;
+  lastSearchQueries: string[];
+  conversationTone: string;
+}
+
+// ── v4.0 — Ghost Cart (Predictive) ─────────────────────
+export interface GhostCartItem {
+  product_id: string;
+  name: string;
+  price: number;
+  currency: string;
+  image_url: string;
+  url: string;
+  in_stock: boolean;
+  prediction_confidence: number;
+  predicted_at: number;
+  delivery_precheck?: {
+    city: string;
+    available: boolean;
+    fee: number;
+  };
+}
+
+// ── v4.0 — Session Data ─────────────────────────────────
+export interface SessionData {
+  id: string;
+  createdAt: number;
+  lastActiveAt: number;
+  messages: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
+  memory: ConversationMemory;
+  ghostCart: GhostCartItem[];
+  lastMood: string;
+  lastIntent: string;
+  messageCount: number;
+}
+
+// ── v4.0 — MCP Telemetry ────────────────────────────────
+export interface MCPTelemetry {
+  totalRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  avgResponseTimeMs: number;
+  lastResponseTimeMs: number;
+  circuitBreakerOpen: boolean;
+}
+
+export type Mood = 'neutral' | 'warm' | 'excited' | 'urgent' | 'romantic' | 'calm';
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -96,4 +166,7 @@ export interface ChatMessage {
   tenSecondDecision?: Product;
   groupGift?: { goal: number; productName: string };
   giftMessage?: string;
+  // v4.0
+  mood?: Mood;
+  smartSuggestions?: SmartSuggestion[];
 }
