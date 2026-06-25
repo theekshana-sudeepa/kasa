@@ -4,6 +4,8 @@ import { useState } from 'react';
 import type { Product } from '../lib/mcp/types';
 import { useChatStore } from '../lib/store/chat-store';
 import ProductModal from './ProductModal';
+import KasaPickBadge from './KasaPickBadge';
+import { useToast } from './Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ShoppingCart, Info, Check, Package } from 'lucide-react';
 
@@ -24,6 +26,7 @@ export default function ProductCard({ product }: ProductCardProps) {
   const [added, setAdded] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const addToCart = useChatStore((state) => state.addToCart);
+  const toast = useToast();
 
   const handleAdd = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -37,6 +40,7 @@ export default function ProductCard({ product }: ProductCardProps) {
       quantity: 1,
       image_url: product.image_url || '',
     });
+    toast.success(`Added to cart!`);
     
     setTimeout(() => setAdded(false), 2000);
   };
@@ -89,6 +93,13 @@ export default function ProductCard({ product }: ProductCardProps) {
           <div className="product-card-price-badge">
             {formatPrice(product.price, product.currency)}
           </div>
+
+          {/* v4.0 — KASA's Pick badge */}
+          {product.kasaPick && (
+            <div style={{ position: 'absolute', top: 8, left: 8 }}>
+              <KasaPickBadge reason={product.matchReason} compact />
+            </div>
+          )}
         </div>
         
         <div className="product-card-body">

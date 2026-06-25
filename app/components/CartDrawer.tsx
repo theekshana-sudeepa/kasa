@@ -4,6 +4,8 @@ import { useChatStore } from '../lib/store/chat-store';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Minus, Plus, Trash2, ShoppingBag, Package } from 'lucide-react';
 import { t } from '../lib/i18n/translations';
+import EmptyState from './EmptyState';
+import { useToast } from './Toast';
 
 interface CartDrawerProps {
   isOpen: boolean;
@@ -13,6 +15,7 @@ interface CartDrawerProps {
 
 export default function CartDrawer({ isOpen, onClose, onCheckout }: CartDrawerProps) {
   const { cart, removeFromCart, updateCartQuantity, language } = useChatStore();
+  const toast = useToast();
   const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
   return (
@@ -93,15 +96,12 @@ export default function CartDrawer({ isOpen, onClose, onCheckout }: CartDrawerPr
         {/* Cart Items */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 20px' }}>
           {cart.length === 0 ? (
-            <div style={{
-              textAlign: 'center',
-              padding: '48px 20px',
-              color: 'var(--kasa-text-3)',
-            }}>
-              <Package size={48} strokeWidth={1} style={{ marginBottom: '12px', opacity: 0.4 }} />
-              <p style={{ fontWeight: 600, marginBottom: '4px' }}>{t('cart.empty', language)}</p>
-              <p style={{ fontSize: '13px' }}>{t('cart.startShopping', language)}</p>
-            </div>
+            <EmptyState
+              variant="cart"
+              title={t('cart.empty', language)}
+              description={t('cart.startShopping', language)}
+              action={{ label: 'Start Shopping', onClick: onClose }}
+            />
           ) : (
             cart.map((item, idx) => (
               <div key={item.product_id} style={{

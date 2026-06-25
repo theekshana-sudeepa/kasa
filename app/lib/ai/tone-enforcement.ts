@@ -87,7 +87,7 @@ export function analyzeResponseTone(response: string): {
     .filter(Boolean) as string[];
 
   const humanMatches = HUMAN_SIGNALS
-    .map((signal) => (signal.test(response) ? 1 : 0))
+    .map((signal) => (signal.test(response) ? 1 : 0) as number)
     .reduce((a, b) => a + b, 0);
 
   const warnings: string[] = [];

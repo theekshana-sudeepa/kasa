@@ -1,13 +1,29 @@
 import { streamText } from 'ai';
 import { buildSystemPrompt, getFestivalContext } from '@/app/lib/ai/system-prompt';
 import { getMCPClient } from '@/app/lib/mcp/client';
-import { extractIntent, extractIntentFallback } from '@/app/lib/ai/intent-extractor';
+import { extractIntent, extractIntentFallback, emotionToMood } from '@/app/lib/ai/intent-extractor';
 import type { ExtractedIntent } from '@/app/lib/ai/intent-extractor';
-import type { CartItem, Language } from '@/app/lib/mcp/types';
+import type { CartItem, Language, Product, Mood } from '@/app/lib/mcp/types';
+import {
+  getConversation,
+  addMessage,
+  setConversation,
+  getMemory,
+  setMemory,
+  setLastMood,
+  getMessageCount,
+  recordMCPRequest,
+} from '@/app/lib/ai/session-store';
+import { extractMemoryFromMessage, mergeMemory, formatMemoryForPrompt } from '@/app/lib/ai/memory-engine';
+import { generateSmartSuggestions, detectResponseType } from '@/app/lib/ai/suggestion-engine';
+import { rankProducts } from '@/app/lib/ai/product-ranker';
+import {
+  predictLikelyAdditions,
+  addToGhostCart,
+  createGhostCartItem,
+} from '@/app/lib/ai/ghost-cart';
 
 type Message = { role: 'user' | 'assistant' | 'system'; content: string };
-const conversations = new Map<string, Message[]>();
-const fallbackMemory = new Map<string, Record<string, any>>();
 const MAX_HISTORY = 30;
 
 interface ChatRequestBody {
@@ -20,7 +36,7 @@ interface ChatRequestBody {
   deliveryDate?: string;
 }
 
-// Get AI model if available
+// ── AI Model Provider ───────────────────────────────────────────
 function getModel() {
   try {
     if (process.env.GROQ_API_KEY) {
@@ -47,7 +63,7 @@ function getModel() {
   return null;
 }
 
-// Parse MCP markdown search results and fetch real images
+// ── MCP Product Parser ──────────────────────────────────────────
 async function parseProductsFromMarkdown(markdown: string): Promise<string> {
   const mcpClient = getMCPClient();
   const products: Array<{
@@ -60,7 +76,6 @@ async function parseProductsFromMarkdown(markdown: string): Promise<string> {
     in_stock: boolean;
   }> = [];
 
-  // Parse: **N. Product Name**\n   ID: `xxx` · LKR N,NNN
   const productRegex = /\*\*\d+\.\s+(.+?)\*\*\s*\n\s*ID:\s*`([^`]+)`\s*·\s*LKR\s*([\d,]+)/g;
   let match;
 
@@ -77,14 +92,14 @@ async function parseProductsFromMarkdown(markdown: string): Promise<string> {
       name,
       price,
       currency: 'LKR',
-      image_url: '', // Will be filled below
+      image_url: '',
       url,
       in_stock: true,
     });
   }
 
-  // Fetch images for ALL products with a 6s timeout
   if (products.length > 0) {
+    const startTime = Date.now();
     await Promise.race([
       Promise.all(products.map(async (p) => {
         try {
@@ -103,31 +118,114 @@ async function parseProductsFromMarkdown(markdown: string): Promise<string> {
             if (images && Array.isArray(images) && images.length > 0) {
               p.image_url = images[0];
             }
-            // Also grab description if available
-            if (data.description && typeof data.description === 'string') {
-              // Store in name for richer display
-            }
           }
         } catch { /* skip */ }
       })),
       new Promise(resolve => setTimeout(resolve, 6000)),
     ]);
+    recordMCPRequest(Date.now() - startTime, true);
 
     return `<PRODUCTS>${JSON.stringify(products)}</PRODUCTS>`;
   }
   return '';
 }
 
-// Smart fallback response when no AI key is available
-async function generateFallbackResponse(sessionId: string, message: string, cart: any[] = []): Promise<string> {
+// ── MCP Tool Execution Pipeline ─────────────────────────────────
+async function executeMCPToolsWithIntent(
+  message: string,
+  intent: ExtractedIntent
+): Promise<string> {
+  const mcpClient = getMCPClient();
+  const lower = message.toLowerCase();
+  const results: string[] = [];
+  let preFormattedProducts = '';
+
+  try {
+    if (intent.is_shopping && intent.search_queries.length > 0) {
+      let allSearchText = '';
+      
+      for (const query of intent.search_queries.slice(0, 2)) {
+        try {
+          const startTime = Date.now();
+          const searchResult = await mcpClient.searchProducts({
+            query,
+            in_stock_only: true,
+            limit: 5,
+            ...(intent.budget ? { max_price: intent.budget.max } : {}),
+          });
+          recordMCPRequest(Date.now() - startTime, true);
+          const parsed = mcpClient.parseResult<string>(searchResult);
+          
+          if (parsed && !parsed.includes('No products found')) {
+            results.push(`[SEARCH RESULTS for "${query}" (intent: ${intent.shopping_intent})]:\n${parsed}`);
+            allSearchText += parsed + '\n';
+          }
+        } catch (searchErr) {
+          console.warn(`[KASA MCP] Search failed for "${query}":`, searchErr);
+        }
+      }
+
+      if (results.length === 0) {
+        let fallbackQuery = message
+          .replace(/^(show me|find me|search for|i want|i need|looking for|can you find|get me|i'm looking for|i am looking for)\s*/i, '')
+          .replace(/\s*(please|thanks|thank you|pls)$/i, '')
+          .trim();
+        if (fallbackQuery.length < 2) fallbackQuery = message;
+
+        const searchResult = await mcpClient.searchProducts({ query: fallbackQuery, in_stock_only: true, limit: 5 });
+        const parsed = mcpClient.parseResult<string>(searchResult);
+        results.push(`[SEARCH RESULTS for "${fallbackQuery}"]:\n${parsed}`);
+        allSearchText = parsed;
+      }
+
+      if (allSearchText) {
+        preFormattedProducts = await parseProductsFromMarkdown(allSearchText);
+      }
+    } else if (intent.intent_category === 'BROWSE' || lower.includes('categor') || lower.includes('browse') || lower.includes('what do you have')) {
+      const catResult = await mcpClient.listCategories();
+      const parsed = mcpClient.parseResult<string>(catResult);
+      results.push(`[CATEGORIES]:\n${parsed}`);
+    }
+
+    const trackMatch = message.match(/(?:track|status|where is)\s+(?:order\s*)?(?:#?\s*)([\w\d]{5,})/i);
+    if (trackMatch) {
+      const trackResult = await mcpClient.trackOrder(trackMatch[1]);
+      const parsed = mcpClient.parseResult<string>(trackResult);
+      results.push(`[ORDER TRACKING]:\n${parsed}`);
+    }
+  } catch (err) {
+    console.error('[KASA MCP] Tool error:', err);
+  }
+
+  let combined = results.join('\n\n');
+  if (preFormattedProducts) {
+    combined += `\n\n[PRE-FORMATTED PRODUCTS WITH REAL IMAGES — USE THIS EXACT JSON IN YOUR <PRODUCTS> TAG, DO NOT MODIFY OR INVENT IMAGE URLS]:\n${preFormattedProducts}`;
+  }
+  return combined;
+}
+
+// ── Smart Fallback (No AI Key) ──────────────────────────────────
+async function generateFallbackResponse(
+  sessionId: string,
+  message: string,
+  cart: CartItem[] = []
+): Promise<{ text: string; mood: Mood }> {
   const mcpClient = getMCPClient();
   const lower = message.toLowerCase();
   let response = '';
   let productsTag = '';
   let urgencyPrefix = '';
+  let mood: Mood = 'neutral';
+  
+  // Update memory from this message
+  const memory = getMemory(sessionId);
+  const memUpdates = extractMemoryFromMessage(message, memory, cart);
+  const updatedMemory = mergeMemory(memory, memUpdates);
+  setMemory(sessionId, updatedMemory);
   
   if (lower.match(/\b(urgent|asap|today|emergency|fast|quick)\b/i)) {
     urgencyPrefix = `**Urgency Detected:** I see you need this fast! I'll prioritize same-day delivery options available in Colombo & Suburbs.\n\n`;
+    mood = 'urgent';
   }
 
   try {
@@ -149,9 +247,7 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
       const date = message.trim();
       let deliveryMsg = `Date confirmed: **${date}**`;
       
-      // Perform delivery check using MCP
-      // Note: In fallback mode we use a mock check or actual MCP check if we have the city
-      const cityToCheck = message.includes('Colombo') ? 'Colombo' : 'Kandy'; // fallback default if not passed perfectly
+      const cityToCheck = updatedMemory.deliveryCity || 'Colombo';
       try {
         const checkResult = await mcpClient.checkDelivery(cityToCheck, date, cart[0].product_id);
         const checkText = mcpClient.parseResult<string>(checkResult);
@@ -161,8 +257,6 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
       } catch (e) {
         console.error('Delivery check error', e);
       }
-      
-      fallbackMemory.set(sessionId, { ...(fallbackMemory.get(sessionId) || {}), deliveryDate: date });
 
       response = `${deliveryMsg}\n\nAlmost done! I just need the recipient's details to deliver the items. Please fill out the secure form below:`;
       response += `\n\n<CHECKOUT_FORM/>`;
@@ -186,7 +280,6 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         senderEmail = sParts[1] || 'Unknown';
       }
 
-      // Remove prefixes like "Name:", "Phone:" if user typed them
       detailsStr = detailsStr.replace(/name:|phone:|address:|to:/gi, '');
       const parts = detailsStr.split(',').map(s => s.trim());
       
@@ -194,7 +287,6 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
       let phone = 'Unknown';
       let address = 'Unknown';
 
-      // Simple heuristic: Phone is the part with 9+ digits
       const phoneIndex = parts.findIndex(p => /[0-9]{9,}/.test(p.replace(/\s|-/g, '')));
       
       if (phoneIndex !== -1) {
@@ -207,15 +299,6 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         address = parts.slice(2).join(', ') || 'Unknown';
       }
 
-      fallbackMemory.set(sessionId, {
-        ...(fallbackMemory.get(sessionId) || {}),
-        recipientName: name,
-        recipientPhone: phone,
-        recipientAddress: address,
-        senderName,
-        senderEmail
-      });
-
       response = `Great, I've noted the delivery details:\n\n**Name:** ${name}\n**Phone:** ${phone}\n**Address:** ${address}\n\nIs this correct? If yes, how would you like to pay?`;
       response += `\n\n<QUICK_REPLIES>["Credit/Debit Card", "Cash on Delivery", "Bank Transfer", "No, let me re-enter details"]</QUICK_REPLIES>`;
     }
@@ -226,7 +309,7 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
     }
     // CONFIRM ORDER RESPONSE
     else if (lower.match(/confirm order|pay now/i)) {
-      const mem = fallbackMemory.get(sessionId) || {};
+      const mem = updatedMemory;
       const items = cart.map(c => `${c.product_id}:${c.quantity}`).join(',');
       
       try {
@@ -234,11 +317,11 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
           items,
           delivery_city: mem.deliveryCity || 'Colombo',
           delivery_date: mem.deliveryDate || new Date(Date.now() + 86400000).toISOString().split('T')[0],
-          recipient_name: mem.recipientName || 'Test User',
-          recipient_phone: mem.recipientPhone || '0771234567',
-          recipient_address: mem.recipientAddress || '123 Test St',
-          sender_name: mem.senderName || 'Test Sender',
-          sender_email: mem.senderEmail || 'test@test.com'
+          recipient_name: mem.recipientInfo?.name || 'Test User',
+          recipient_phone: mem.recipientInfo?.phone || '0771234567',
+          recipient_address: mem.recipientInfo?.address || '123 Test St',
+          sender_name: mem.senderInfo?.name || 'Test Sender',
+          sender_email: mem.senderInfo?.email || 'test@test.com'
         });
         
         const rawRes = mcpClient.parseResult<string>(orderRes);
@@ -255,6 +338,7 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
           
           response = `**Order Created Successfully!**\n\nYour order number is **${order.order_number}**. Please click the secure link below to complete your payment. Once paid, we'll start preparing your items for delivery!`;
           response += `\n\n<ORDER>${JSON.stringify(order)}</ORDER>\n\n<CART_UPDATE>[]</CART_UPDATE>`;
+          mood = 'excited';
         } else {
           throw new Error('Failed to parse order from MCP');
         }
@@ -263,7 +347,7 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         response = `Oops, something went wrong creating your order. Please try again!\n\n<QUICK_REPLIES>["Confirm Order", "Cancel"]</QUICK_REPLIES>`;
       }
     }
-    // DYNAMIC CITY CHECK (Checkout mode only)
+    // DYNAMIC CITY CHECK
     else if (cart.length > 0 && message.length > 2 && message.split(' ').length <= 3 && !lower.includes('show') && !lower.includes('find') && !lower.includes('search')) {
       const cityResult = await mcpClient.listDeliveryCities(message.trim());
       const cityText = mcpClient.parseResult<string>(cityResult);
@@ -271,7 +355,8 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         const cityMatch = cityText.match(/- \*\*([^*]+)\*\*/);
         const matchedCityName = cityMatch ? cityMatch[1] : message.trim();
         
-        fallbackMemory.set(sessionId, { ...(fallbackMemory.get(sessionId) || {}), deliveryCity: matchedCityName });
+        // Update memory with city
+        setMemory(sessionId, mergeMemory(updatedMemory, { deliveryCity: matchedCityName }));
         
         response = `Delivery to **${matchedCityName}** confirmed!\n\nNow, what **date** do you need it delivered? (e.g., 2026-06-15)\n\nOr I can check what's available:`;
         response += `\n\n<QUICK_REPLIES>["Tomorrow", "This weekend", "2026-06-15", "As soon as possible"]</QUICK_REPLIES>`;
@@ -279,18 +364,10 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
     }
 
     if (!response) {
-      // ── EMOTIONAL INTENT DETECTION (Fallback Mode) ──
-      // Use heuristic intent extraction to understand emotional messages
       const heuristicIntent = extractIntentFallback(message);
-      console.log(`[KASA Fallback] Heuristic intent:`, JSON.stringify({
-        emotion: heuristicIntent.emotion,
-        intent: heuristicIntent.intent_category,
-        shopping: heuristicIntent.is_shopping,
-        queries: heuristicIntent.search_queries,
-        occasion: heuristicIntent.occasion,
-      }));
+      mood = heuristicIntent.mood as Mood;
 
-      // SURPRISE ME INTENT
+      // SURPRISE ME
       if (lower.match(/surprise me|random gift/i)) {
         const categories = ['cake', 'electronic', 'flower', 'chocolate'];
         const randomCat = categories[Math.floor(Math.random() * categories.length)];
@@ -299,12 +376,10 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         productsTag = await parseProductsFromMarkdown(text);
         
         response = `**Surprise!** I've pulled some completely random, premium wildcard items for you. How about one of these?\n\n${productsTag}`;
-        response += `\n\n<QUICK_REPLIES>["Surprise me again!", "Show me cakes instead", "Browse categories"]</QUICK_REPLIES>`;
+        mood = 'excited';
       }
-      // ── EMOTIONAL SHOPPING INTENT ──
-      // Handles messages like "I broke up with my girlfriend… I need to send some flowers"
+      // EMOTIONAL SHOPPING
       else if (heuristicIntent.is_shopping && heuristicIntent.emotion !== 'neutral' && heuristicIntent.search_queries.length > 0) {
-        // Use emotional context to generate empathetic prefix
         const emotionalPrefixes: Record<string, string> = {
           sad: `I hear you, and I'm here to help. 💛 Let me find something perfect...`,
           anxious: `Don't worry — I've got you covered! Let me find something right away...`,
@@ -316,8 +391,6 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         };
 
         const prefix = emotionalPrefixes[heuristicIntent.emotion] || '';
-        
-        // Search using the first (best) extracted query
         const bestQuery = heuristicIntent.search_queries[0];
         const result = await mcpClient.searchProducts({
           query: bestQuery,
@@ -328,7 +401,6 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         const text = mcpClient.parseResult<string>(result);
         productsTag = await parseProductsFromMarkdown(text);
 
-        // Try second query if first had no results
         if (!productsTag && heuristicIntent.search_queries.length > 1) {
           const secondQuery = heuristicIntent.search_queries[1];
           const result2 = await mcpClient.searchProducts({ query: secondQuery, in_stock_only: true, limit: 5 });
@@ -343,28 +415,23 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
             ? ` for your ${heuristicIntent.gift_target}` : '';
           
           response = `${prefix}\n\nHere are some picks I think would be perfect${targetNote}${occasionNote}:\n\n${productsTag}\n\nWant me to find more options or shall we go with one of these?`;
-          response += `\n\n<QUICK_REPLIES>["Tell me more about the first one", "Show me more options", "Add to cart", "Search for something else"]</QUICK_REPLIES>`;
         } else {
           response = `${prefix}\n\nI couldn't find exact matches, but let me suggest some alternatives!\n\n<QUICK_REPLIES>["Show me flowers", "Show me chocolates", "Show me gift hampers", "Browse categories"]</QUICK_REPLIES>`;
         }
       }
-      // Regular search intent (neutral emotion)
+      // Regular search
       else if (heuristicIntent.is_shopping && heuristicIntent.search_queries.length > 0) {
         const query = heuristicIntent.search_queries[0];
-
         const result = await mcpClient.searchProducts({ query, in_stock_only: true, limit: 5 });
         const text = mcpClient.parseResult<string>(result);
-
         productsTag = await parseProductsFromMarkdown(text);
 
         if (productsTag) {
           response = `Here are some great options I found for "${query}"! \n\n${productsTag}\n\nWould you like to know more about any of these, or shall I search for something specific?`;
-          response += `\n\n<QUICK_REPLIES>["Tell me more about the first one", "Show me more options", "Add to cart", "Search for something else"]</QUICK_REPLIES>`;
         } else {
           response = `I searched for "${query}" but couldn't find exact matches right now. Let me suggest some alternatives!\n\n<QUICK_REPLIES>["Show me birthday gifts", "Browse categories", "Show me flowers", "Show me chocolates"]</QUICK_REPLIES>`;
         }
       }
-      
       // Categories
       else if (lower.includes('categor') || lower.includes('browse') || lower.includes('what do you have') || lower.includes('what can')) {
         const result = await mcpClient.listCategories();
@@ -386,6 +453,7 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
       // Gift mode
       else if (lower.includes('gift') || lower.includes('present') || lower.includes('surprise for') || lower.includes('birthday for')) {
         response = `**Gift Mode ON!** Let me help you find the perfect gift.\n\nWho is the lucky person and what's your budget? (e.g. "For my wife, under Rs. 5000")\n\n<QUICK_REPLIES>["Show me popular gifts", "For my mom", "For my girlfriend", "Browse gift categories"]</QUICK_REPLIES>`;
+        mood = 'warm';
       }
       // Tracking Check
       else if (lower.match(/(kap\d+|vimp[a-z0-9]+)/i)) {
@@ -412,6 +480,7 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
         else greeting = 'Good evening';
         
         response = `${greeting}! I'm KASA \u2014 your personal shopping concierge for Kapruka.com!\n\nI can find you anything \u2014 from electronics and groceries to birthday cakes and flowers. What are you in the mood for?\n\n<QUICK_REPLIES>["Show me trending items", "Birthday gift ideas", "Browse categories", "I need something specific"]</QUICK_REPLIES>`;
+        mood = 'warm';
       }
       // Default
       else {
@@ -423,86 +492,42 @@ async function generateFallbackResponse(sessionId: string, message: string, cart
     response = `I'm having a moment connecting to the shop. Let me try again!\n\n<QUICK_REPLIES>["Try again", "Browse categories", "Show me gifts"]</QUICK_REPLIES>`;
   }
 
-  return urgencyPrefix + response;
+  // Add mood tag to response
+  response = urgencyPrefix + response + `\n<MOOD>${mood}</MOOD>`;
+  setLastMood(sessionId, mood);
+
+  return { text: response, mood };
 }
 
-// Execute MCP tools using extracted intent for intelligent routing
-async function executeMCPToolsWithIntent(message: string, intent: ExtractedIntent): Promise<string> {
-  const mcpClient = getMCPClient();
-  const lower = message.toLowerCase();
-  const results: string[] = [];
-  let preFormattedProducts = ''; // Pre-parsed products with REAL images
+// ── v4.0 Response Enrichment Pipeline ───────────────────────────
+function enrichResponseWithProducts(
+  products: Product[],
+  sessionId: string,
+  intent: ExtractedIntent,
+  isGiftMode: boolean
+): Product[] {
+  const memory = getMemory(sessionId);
+  
+  // Step 1: Rank products using intelligence
+  const ranked = rankProducts(products, {
+    memory,
+    searchQuery: intent.search_queries[0] || '',
+    isGiftMode,
+  });
 
-  try {
-    // Use extracted search queries for intelligent product search
-    if (intent.is_shopping && intent.search_queries.length > 0) {
-      let allSearchText = '';
-      
-      for (const query of intent.search_queries.slice(0, 2)) {
-        try {
-          const searchResult = await mcpClient.searchProducts({
-            query,
-            in_stock_only: true,
-            limit: 5,
-            ...(intent.budget ? { max_price: intent.budget.max } : {}),
-          });
-          const parsed = mcpClient.parseResult<string>(searchResult);
-          
-          if (parsed && !parsed.includes('No products found')) {
-            results.push(`[SEARCH RESULTS for "${query}" (intent: ${intent.shopping_intent})]:\n${parsed}`);
-            allSearchText += parsed + '\n';
-          }
-        } catch (searchErr) {
-          console.warn(`[KASA MCP] Search failed for "${query}":`, searchErr);
-        }
-      }
-
-      // If AI queries didn't find anything, fall back to raw message extraction
-      if (results.length === 0) {
-        let fallbackQuery = message
-          .replace(/^(show me|find me|search for|i want|i need|looking for|can you find|get me|i'm looking for|i am looking for)\s*/i, '')
-          .replace(/\s*(please|thanks|thank you|pls)$/i, '')
-          .trim();
-        if (fallbackQuery.length < 2) fallbackQuery = message;
-
-        const searchResult = await mcpClient.searchProducts({ query: fallbackQuery, in_stock_only: true, limit: 5 });
-        const parsed = mcpClient.parseResult<string>(searchResult);
-        results.push(`[SEARCH RESULTS for "${fallbackQuery}"]:\n${parsed}`);
-        allSearchText = parsed;
-      }
-
-      // PRE-FETCH real product images from MCP getProduct endpoint
-      // This is the critical step — without it the AI invents fake image URLs
-      if (allSearchText) {
-        preFormattedProducts = await parseProductsFromMarkdown(allSearchText);
-      }
-    }
-    // Non-shopping intents: handle browse, track, etc.
-    else if (intent.intent_category === 'BROWSE' || lower.includes('categor') || lower.includes('browse') || lower.includes('what do you have')) {
-      const catResult = await mcpClient.listCategories();
-      const parsed = mcpClient.parseResult<string>(catResult);
-      results.push(`[CATEGORIES]:\n${parsed}`);
-    }
-
-    // Track order if message contains order number
-    const trackMatch = message.match(/(?:track|status|where is)\s+(?:order\s*)?(?:#?\s*)([\w\d]{5,})/i);
-    if (trackMatch) {
-      const trackResult = await mcpClient.trackOrder(trackMatch[1]);
-      const parsed = mcpClient.parseResult<string>(trackResult);
-      results.push(`[ORDER TRACKING]:\n${parsed}`);
-    }
-  } catch (err) {
-    console.error('[KASA MCP] Tool error:', err);
+  // Step 2: Ghost cart predictions for top products
+  const predictions = predictLikelyAdditions(intent, ranked, sessionId);
+  if (predictions.length > 0) {
+    const ghostItems = ranked
+      .filter(p => predictions.includes(p.product_id))
+      .map(p => createGhostCartItem(p, 0.7));
+    addToGhostCart(sessionId, ghostItems);
   }
 
-  // Combine results + pre-formatted products with real images
-  let combined = results.join('\n\n');
-  if (preFormattedProducts) {
-    combined += `\n\n[PRE-FORMATTED PRODUCTS WITH REAL IMAGES — USE THIS EXACT JSON IN YOUR <PRODUCTS> TAG, DO NOT MODIFY OR INVENT IMAGE URLS]:\n${preFormattedProducts}`;
-  }
-  return combined;
+  return ranked;
 }
 
+// ── Main POST Handler ───────────────────────────────────────────
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as ChatRequestBody;
@@ -521,15 +546,24 @@ export async function POST(request: Request) {
       });
     }
 
-    // Try AI-powered response first
+    // ── Step 1: Update Conversation Memory ──
+    const currentMemory = getMemory(sessionId);
+    const memoryUpdates = extractMemoryFromMessage(message, currentMemory, cart);
+    const updatedMemory = mergeMemory(currentMemory, memoryUpdates);
+    if (deliveryCity && !updatedMemory.deliveryCity) {
+      updatedMemory.deliveryCity = deliveryCity;
+    }
+    setMemory(sessionId, updatedMemory);
+
+    // ── Step 2: Try AI-powered response ──
     const modelConfig = getModel();
 
     if (modelConfig) {
       try {
         console.log(`[KASA] Using ${modelConfig.provider}`);
 
-        // Step 1: Deep Intent Extraction (AI-powered)
-        const lastAssistantMsg = conversations.get(sessionId)?.slice(-1)[0]?.content || '';
+        // Deep Intent Extraction (AI-powered)
+        const lastAssistantMsg = getConversation(sessionId)?.slice(-1)[0]?.content || '';
         const conversationContext = cart.length > 0
           ? `Cart has ${cart.length} items. ${lastAssistantMsg.slice(0, 150)}`
           : lastAssistantMsg.slice(0, 200);
@@ -540,40 +574,65 @@ export async function POST(request: Request) {
           conversationContext
         );
         
-        console.log(`[KASA] Extracted Intent:`, JSON.stringify({
+        console.log(`[KASA] Intent:`, JSON.stringify({
           emotion: extractedIntent.emotion,
+          mood: extractedIntent.mood,
           intent: extractedIntent.intent_category,
           shopping: extractedIntent.is_shopping,
           queries: extractedIntent.search_queries,
-          occasion: extractedIntent.occasion,
-          gift_target: extractedIntent.gift_target,
-          tone: extractedIntent.tone,
+          confidence: extractedIntent.confidence,
         }));
 
-        // Step 2: Execute MCP tools using intelligent search queries
+        // Update memory with intent signals
+        if (extractedIntent.occasion && extractedIntent.occasion !== 'none') {
+          updatedMemory.occasion = extractedIntent.occasion;
+        }
+        if (extractedIntent.gift_target && extractedIntent.gift_target !== 'unknown') {
+          updatedMemory.giftTarget = extractedIntent.gift_target;
+        }
+        if (extractedIntent.budget) {
+          updatedMemory.budget = extractedIntent.budget;
+        }
+        if (extractedIntent.search_queries.length > 0) {
+          updatedMemory.lastSearchQueries = extractedIntent.search_queries;
+        }
+        setMemory(sessionId, updatedMemory);
+        setLastMood(sessionId, extractedIntent.mood as Mood);
+
+        // Execute MCP tools
         const festivalContext = getFestivalContext();
-        const systemPrompt = buildSystemPrompt(language, giftMode, cart, deliveryCity ?? null, festivalContext, extractedIntent);
+        const systemPrompt = buildSystemPrompt(
+          language, giftMode, cart, deliveryCity ?? null,
+          festivalContext, extractedIntent, updatedMemory
+        );
         const mcpData = await executeMCPToolsWithIntent(message, extractedIntent);
 
-        // Extract pre-formatted products (with real images) from mcpData
-        // We'll inject them directly after AI stream to guarantee real image URLs
+        // Extract pre-formatted products
         let preFormattedTag = '';
         let mcpDataForAI = mcpData;
         const pfMarker = '[PRE-FORMATTED PRODUCTS WITH REAL IMAGES';
         const pfIdx = mcpData.indexOf(pfMarker);
         if (pfIdx !== -1) {
-          // Extract the <PRODUCTS>...</PRODUCTS> tag
           const tagMatch = mcpData.slice(pfIdx).match(/<PRODUCTS>[\s\S]*?<\/PRODUCTS>/);
           if (tagMatch) {
-            preFormattedTag = tagMatch[0];
+            // v4.0: Run product ranking on pre-formatted products
+            try {
+              const productsMatch = tagMatch[0].match(/<PRODUCTS>([\s\S]*?)<\/PRODUCTS>/);
+              if (productsMatch) {
+                const rawProducts = JSON.parse(productsMatch[1]) as Product[];
+                const rankedProducts = enrichResponseWithProducts(
+                  rawProducts, sessionId, extractedIntent, giftMode
+                );
+                preFormattedTag = `<PRODUCTS>${JSON.stringify(rankedProducts)}</PRODUCTS>`;
+              }
+            } catch {
+              preFormattedTag = tagMatch[0];
+            }
           }
-          // Strip the pre-formatted section from what we send to the AI
-          // AI only needs the search result text, not the JSON blob
           mcpDataForAI = mcpData.slice(0, pfIdx).trim();
         }
 
-        let history = conversations.get(sessionId) ?? [];
-        // Tell the AI to focus on writing text — we'll handle the PRODUCTS tag ourselves
+        let history = getConversation(sessionId);
         const noProductsTagInstruction = preFormattedTag
           ? `\n\n[IMPORTANT: Do NOT output a <PRODUCTS> tag. Real product data with images will be appended automatically after your response. Just write your conversational text.]`
           : '';
@@ -584,8 +643,7 @@ export async function POST(request: Request) {
         history.push({ role: 'user' as const, content: userContent });
         if (history.length > MAX_HISTORY) history = history.slice(-MAX_HISTORY);
 
-        // Step 3: Generate emotionally-aware response
-        let finalText = '';
+        // Generate response
         const result = streamText({
           model: modelConfig.model,
           system: systemPrompt,
@@ -593,20 +651,17 @@ export async function POST(request: Request) {
           temperature: 0.7,
           onFinish: async (event) => {
             if (event.text) {
-              finalText = event.text;
-              // Store clean text (without injected products) in history
               history.push({ role: 'assistant' as const, content: event.text + (preFormattedTag ? '\n' + preFormattedTag : '') });
-              conversations.set(sessionId, history);
+              setConversation(sessionId, history);
             }
           },
         });
 
-        // If we have pre-formatted products with real images, inject them at the end of the stream
+        // Inject pre-formatted products at end of stream
         if (preFormattedTag) {
           const encoder = new TextEncoder();
           const injectTag = preFormattedTag;
           
-          // Create a transform stream that appends the products tag after the AI finishes
           let streamDone = false;
           const transform = new TransformStream({
             transform(chunk, controller) {
@@ -615,7 +670,6 @@ export async function POST(request: Request) {
             flush(controller) {
               if (!streamDone) {
                 streamDone = true;
-                // Append quick replies and the real products tag
                 controller.enqueue(encoder.encode(`\n${injectTag}`));
               }
             },
@@ -631,15 +685,13 @@ export async function POST(request: Request) {
         return result.toTextStreamResponse();
       } catch (aiError) {
         console.error(`[KASA] AI error, falling back:`, aiError);
-        // Fall through to smart fallback
       }
     }
 
-    // Smart fallback — works without any AI key!
+    // ── Step 3: Smart Fallback ──
     console.log('[KASA] Using smart fallback (no AI key)');
-    const fallbackResponse = await generateFallbackResponse(sessionId, message, cart);
+    const { text: fallbackResponse } = await generateFallbackResponse(sessionId, message, cart);
 
-    // Stream the fallback response character by character for realistic feel
     const encoder = new TextEncoder();
     const stream = new ReadableStream({
       async start(controller) {

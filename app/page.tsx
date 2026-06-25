@@ -19,7 +19,11 @@ import CategoryGrid from './components/CategoryGrid';
 import TenSecondDecision from './components/TenSecondDecision';
 import GroupGiftLink from './components/GroupGiftLink';
 import GiftMessageCard from './components/GiftMessageCard';
-import type { ChatMessage, Product } from './lib/mcp/types';
+import MoodBackground from './components/MoodBackground';
+import VoiceInput from './components/VoiceInput';
+import SmartSuggestions from './components/SmartSuggestions';
+import { useToast } from './components/Toast';
+import type { ChatMessage, Product, Mood } from './lib/mcp/types';
 import { parseAssistantResponse } from './lib/ai/response-parser';
 import { ChevronDown, Gift, Package, LayoutGrid, ShoppingCart } from 'lucide-react';
 import KasaAvatar from './components/KasaAvatar';
@@ -35,13 +39,18 @@ export default function Home() {
     deliveryDate,
     isLoading,
     sessionId,
+    mood,
+    smartSuggestions,
     addMessage,
     setLoading,
     addToCart,
     setCart,
     toggleGiftMode,
+    setMood,
+    setSmartSuggestions,
   } = useChatStore();
 
+  const toast = useToast();
   const [input, setInput] = useState('');
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -142,6 +151,16 @@ export default function Home() {
 
         const parsedResponse = parseAssistantResponse(fullText);
 
+        // v4.0 — Sync mood from AI response
+        if (parsedResponse.mood) {
+          setMood(parsedResponse.mood);
+        }
+
+        // v4.0 — Sync smart suggestions
+        if (parsedResponse.smartSuggestions && parsedResponse.smartSuggestions.length > 0) {
+          setSmartSuggestions(parsedResponse.smartSuggestions);
+        }
+
         useChatStore.setState((state) => ({
           messages: state.messages.map((m) =>
             m.id === assistantMsgId
@@ -157,6 +176,8 @@ export default function Home() {
                   categories: parsedResponse.categories,
                   checkoutForm: parsedResponse.checkoutForm,
                   giftMessage: parsedResponse.giftMessage,
+                  mood: parsedResponse.mood,
+                  smartSuggestions: parsedResponse.smartSuggestions,
                 }
               : m
           ),
@@ -179,7 +200,7 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [isLoading, sessionId, language, cart, giftMode, deliveryCity, deliveryDate, addMessage, setLoading, setCart]);
+  }, [isLoading, sessionId, language, cart, giftMode, deliveryCity, deliveryDate, addMessage, setLoading, setCart, setMood, setSmartSuggestions]);
 
   const handleSend = () => sendMessage(input);
 
@@ -198,6 +219,7 @@ export default function Home() {
       quantity: 1,
       image_url: product.image_url,
     });
+    toast.success(`${product.name.slice(0, 30)}${product.name.length > 30 ? '…' : ''} added to cart!`);
   };
 
   const handleViewDetails = (product: Product) => {
@@ -205,7 +227,9 @@ export default function Home() {
   };
 
   const handleNewChat = () => {
-    useChatStore.setState({ messages: [], cart: [], deliveryCity: null, deliveryDate: null });
+    useChatStore.getState().newChat();
+    setMood('neutral' as Mood);
+    setSmartSuggestions([]);
   };
 
   const formatTime = (ts: number) =>
@@ -271,6 +295,7 @@ export default function Home() {
 
   return (
     <div className="app-container">
+      <MoodBackground mood={mood} />
       <Header onNewChat={handleNewChat} />
 
       <div className="chat-area" ref={chatAreaRef}>
@@ -390,6 +415,16 @@ export default function Home() {
                       onSelect={(reply) => sendMessage(reply)}
                     />
                   )}
+
+                  {/* v4.0 — Smart Suggestions (last message only) */}
+                  {msg.smartSuggestions && msg.smartSuggestions.length > 0 && msg.id === messages[messages.length - 1]?.id && (
+                    <div style={{ paddingLeft: '42px', paddingRight: '16px' }}>
+                      <SmartSuggestions
+                        suggestions={msg.smartSuggestions}
+                        onSelect={(text) => sendMessage(text)}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -420,6 +455,13 @@ export default function Home() {
             onChange={handleInputChange}
             onKeyDown={handleKeyDown}
             rows={1}
+            disabled={isLoading}
+          />
+          <VoiceInput
+            onTranscript={(text) => {
+              setInput(text);
+              sendMessage(text);
+            }}
             disabled={isLoading}
           />
           <button

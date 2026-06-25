@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ChatMessage, CartItem, Language } from '../mcp/types';
+import type { ChatMessage, CartItem, Language, Mood, SmartSuggestion } from '../mcp/types';
 
 export interface OccasionMemory {
   person: string;
@@ -26,6 +26,10 @@ interface ChatState {
   sessionId: string;
   userMemory: UserMemory;
   ghostContext: any;
+  // v4.0
+  mood: Mood;
+  smartSuggestions: SmartSuggestion[];
+  voiceMode: boolean;
 
   addMessage: (msg: ChatMessage) => void;
   updateLastAssistantMessage: (content: string) => void;
@@ -41,6 +45,11 @@ interface ChatState {
   setCart: (cart: CartItem[]) => void;
   updateUserMemory: (memory: Partial<UserMemory>) => void;
   setGhostContext: (context: any) => void;
+  // v4.0
+  setMood: (mood: Mood) => void;
+  setSmartSuggestions: (suggestions: SmartSuggestion[]) => void;
+  toggleVoiceMode: () => void;
+  newChat: () => void;
 }
 
 // Use a fixed session ID to avoid SSR/client mismatch
@@ -60,6 +69,9 @@ export const useChatStore = create<ChatState>()(
       sessionId: SESSION_ID,
       userMemory: {},
       ghostContext: null,
+      mood: 'neutral' as Mood,
+      smartSuggestions: [],
+      voiceMode: false,
 
       addMessage: (msg) =>
         set((state) => ({
@@ -137,6 +149,23 @@ export const useChatStore = create<ChatState>()(
     })),
 
   setGhostContext: (context) => set({ ghostContext: context }),
+
+  setMood: (mood) => set({ mood }),
+
+  setSmartSuggestions: (suggestions) => set({ smartSuggestions: suggestions }),
+
+  toggleVoiceMode: () => set((state) => ({ voiceMode: !state.voiceMode })),
+
+  newChat: () => set({
+    messages: [],
+    isLoading: false,
+    mood: 'neutral' as Mood,
+    smartSuggestions: [],
+    deliveryCity: null,
+    deliveryDate: null,
+    giftMode: false,
+    sessionId: 'kasa-' + Math.random().toString(36).slice(2, 10),
+  }),
     }),
     {
       name: 'kasa-storage',
