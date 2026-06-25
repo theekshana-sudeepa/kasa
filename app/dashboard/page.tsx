@@ -98,7 +98,7 @@ export default function DashboardPage() {
     hidden: { opacity: 0, y: 20 },
     visible: (i: number) => ({
       opacity: 1, y: 0,
-      transition: { type: 'spring', stiffness: 300, damping: 25, delay: i * 0.1 }
+      transition: { type: 'spring' as const, stiffness: 300, damping: 25, delay: i * 0.1 }
     }),
   };
 

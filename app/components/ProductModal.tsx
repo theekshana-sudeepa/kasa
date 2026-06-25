@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import type { Product } from '../lib/mcp/types';
 import { useChatStore } from '../lib/store/chat-store';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingCart, Check, Package } from 'lucide-react';
+import { X, ShoppingCart, Check, Package, Share2, ZoomIn, ZoomOut } from 'lucide-react';
+import KasaPickBadge from './KasaPickBadge';
+import { useToast } from './Toast';
 
 interface ProductModalProps {
   product: Product;
@@ -15,15 +17,27 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
   const [mounted, setMounted] = useState(false);
   const [added, setAdded] = useState(false);
   const [imgError, setImgError] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
   const addToCart = useChatStore((state) => state.addToCart);
+  const toast = useToast();
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setMounted(true);
     document.body.style.overflow = 'hidden';
+
+    // Focus trap — Escape to close
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    modalRef.current?.focus();
+
     return () => {
       document.body.style.overflow = '';
+      document.removeEventListener('keydown', handleKeyDown);
     };
-  }, []);
+  }, [onClose]);
 
   const handleAdd = () => {
     setAdded(true);
@@ -34,10 +48,26 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
       quantity: 1,
       image_url: product.image_url || '',
     });
+    toast.success(`${product.name.slice(0, 30)}${product.name.length > 30 ? '…' : ''} added!`);
     setTimeout(() => {
       onClose();
     }, 800);
   };
+
+  const handleShare = useCallback(async () => {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: product.name,
+          text: `Check out ${product.name} on Kapruka!`,
+          url: product.url,
+        });
+      } catch { /* user cancelled */ }
+    } else if (product.url) {
+      await navigator.clipboard.writeText(product.url);
+      toast.info('Link copied to clipboard!');
+    }
+  }, [product, toast]);
 
   if (!mounted) return null;
 
@@ -65,6 +95,10 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
         onClick={onClose}
       >
         <motion.div
+          ref={modalRef}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
           initial={{ opacity: 0, scale: 0.9, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.9, y: 20 }}
@@ -105,14 +139,45 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
             <X size={18} />
           </button>
 
+          {/* Share button */}
+          <button
+            onClick={(e) => { e.stopPropagation(); handleShare(); }}
+            style={{
+              position: 'absolute',
+              top: '12px',
+              right: '56px',
+              background: 'rgba(0,0,0,0.4)',
+              backdropFilter: 'blur(8px)',
+              border: 'none',
+              borderRadius: '50%',
+              width: '36px',
+              height: '36px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              zIndex: 10,
+              color: 'white',
+            }}
+          >
+            <Share2 size={16} />
+          </button>
+
           {/* Image */}
           {hasImage ? (
-            <img
-              src={product.image_url}
-              alt={product.name}
-              style={{ width: '100%', height: '280px', objectFit: 'cover' }}
-              onError={() => setImgError(true)}
-            />
+            <div
+              style={{ cursor: zoomed ? 'zoom-out' : 'zoom-in', overflow: 'hidden' }}
+              onClick={(e) => { e.stopPropagation(); setZoomed(!zoomed); }}
+            >
+              <motion.img
+                src={product.image_url}
+                alt={product.name}
+                style={{ width: '100%', height: '280px', objectFit: 'cover' }}
+                animate={{ scale: zoomed ? 1.8 : 1 }}
+                transition={{ type: 'spring', stiffness: 200, damping: 20 }}
+                onError={() => setImgError(true)}
+              />
+            </div>
           ) : (
             <div style={{
               width: '100%',
@@ -137,6 +202,13 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
             }}>
               {product.name}
             </h2>
+
+            {/* v4.0 — KASA Pick badge */}
+            {product.kasaPick && (
+              <div style={{ marginBottom: '12px' }}>
+                <KasaPickBadge reason={product.matchReason} />
+              </div>
+            )}
 
             <div style={{
               fontSize: '22px',

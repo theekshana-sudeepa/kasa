@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { User, Phone, MapPin, Mail, Send, AlertCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface CheckoutFormProps {
   onSubmit: (details: { name: string; phone: string; address: string; senderName: string; senderEmail: string }) => void;
@@ -78,8 +79,16 @@ export default function CheckoutForm({ onSubmit }: CheckoutFormProps) {
       </div>
 
       <form onSubmit={handleSubmit}>
+        <AnimatePresence mode="wait">
         {step === 1 ? (
-          <div className="checkout-section">
+          <motion.div
+            key="step1"
+            className="checkout-section"
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+          >
             <div className="checkout-section-title">
               <User size={14} /> Recipient Details
             </div>
@@ -147,9 +156,16 @@ export default function CheckoutForm({ onSubmit }: CheckoutFormProps) {
             >
               Continue to Sender Details
             </button>
-          </div>
+          </motion.div>
         ) : (
-          <div className="checkout-section">
+          <motion.div
+            key="step2"
+            className="checkout-section"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 20 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 30 }}
+          >
             <div className="checkout-section-title">
               <Mail size={14} /> Sender Details (You)
             </div>
@@ -204,8 +220,9 @@ export default function CheckoutForm({ onSubmit }: CheckoutFormProps) {
                 )}
               </button>
             </div>
-          </div>
+          </motion.div>
         )}
+        </AnimatePresence>
       </form>
     </div>
   );
