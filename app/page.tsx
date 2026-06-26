@@ -22,8 +22,7 @@ import GiftMessageCard from './components/GiftMessageCard';
 import MoodBackground from './components/MoodBackground';
 import VoiceInput from './components/VoiceInput';
 import SmartSuggestions from './components/SmartSuggestions';
-import { useToast } from './components/Toast';
-import type { ChatMessage, Product, Mood } from './lib/mcp/types';
+import type { ChatMessage, Mood } from './lib/mcp/types';
 import { parseAssistantResponse } from './lib/ai/response-parser';
 import { ChevronDown, Gift, Package, LayoutGrid, ShoppingCart } from 'lucide-react';
 import KasaAvatar from './components/KasaAvatar';
@@ -40,17 +39,15 @@ export default function Home() {
     isLoading,
     sessionId,
     mood,
-    smartSuggestions,
     addMessage,
     setLoading,
-    addToCart,
     setCart,
     toggleGiftMode,
     setMood,
     setSmartSuggestions,
   } = useChatStore();
 
-  const toast = useToast();
+
   const [input, setInput] = useState('');
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
@@ -211,20 +208,6 @@ export default function Home() {
     }
   };
 
-  const handleAddToCart = (product: Product) => {
-    addToCart({
-      product_id: product.product_id,
-      name: product.name,
-      price: product.price,
-      quantity: 1,
-      image_url: product.image_url,
-    });
-    toast.success(`${product.name.slice(0, 30)}${product.name.length > 30 ? '…' : ''} added to cart!`);
-  };
-
-  const handleViewDetails = (product: Product) => {
-    sendMessage(`Tell me more about "${product.name}"`);
-  };
 
   const handleNewChat = () => {
     useChatStore.getState().newChat();

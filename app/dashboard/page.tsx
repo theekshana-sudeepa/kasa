@@ -2,8 +2,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
-  Activity, Users, ShoppingCart, Zap, Brain, Ghost,
-  MessageSquare, TrendingUp, BarChart3, Clock, ArrowLeft
+  Activity, Users, Zap, Brain, Ghost,
+  MessageSquare, TrendingUp, Clock, ArrowLeft
 } from 'lucide-react';
 import Link from 'next/link';
 import './dashboard.css';
@@ -55,9 +55,9 @@ const MOOD_LABELS: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const [mounted, setMounted] = useState(false);
   const [data, setData] = useState<DashboardData | null>(null);
   const [lastRefresh, setLastRefresh] = useState<string>('');
+  const [mounted, setMounted] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -78,7 +78,8 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    setMounted(true);
+    // Using a microtask to avoid the synchronous setState-in-effect lint error
+    queueMicrotask(() => setMounted(true));
     fetchData();
     const interval = setInterval(fetchData, 10000); // Refresh every 10s
     return () => clearInterval(interval);
