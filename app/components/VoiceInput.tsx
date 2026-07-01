@@ -1,13 +1,37 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff } from 'lucide-react';
+import { Mic } from 'lucide-react';
 
 interface VoiceInputProps {
   onTranscript: (text: string) => void;
   language?: string;
   disabled?: boolean;
+}
+
+/* global SpeechRecognition, webkitSpeechRecognition */
+interface SpeechRecognitionEvent {
+  results: { [key: number]: { [key: number]: { transcript: string } } };
+}
+
+interface SpeechRecognitionInstance {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: SpeechRecognitionEvent) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+}
+
+function getSpeechRecognitionAPI(): (new () => SpeechRecognitionInstance) | null {
+  if (typeof window === 'undefined') return null;
+  const win = window as unknown as Record<string, unknown>;
+  return (win.SpeechRecognition || win.webkitSpeechRecognition) as
+    (new () => SpeechRecognitionInstance) | null;
 }
 
 /**
@@ -16,20 +40,21 @@ interface VoiceInputProps {
  */
 export default function VoiceInput({ onTranscript, language = 'en-US', disabled = false }: VoiceInputProps) {
   const [isListening, setIsListening] = useState(false);
-  const [isSupported, setIsSupported] = useState(false);
   const [bars] = useState(() => Array.from({ length: 5 }, () => Math.random()));
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const initializedRef = useRef(false);
 
-  useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
-      setIsSupported(true);
-      const recognition = new SpeechRecognition();
+  const ensureRecognition = useCallback(() => {
+    if (initializedRef.current) return !!recognitionRef.current;
+
+    const SpeechRecognitionAPI = getSpeechRecognitionAPI();
+    if (SpeechRecognitionAPI) {
+      const recognition = new SpeechRecognitionAPI();
       recognition.continuous = false;
       recognition.interimResults = false;
       recognition.lang = language;
 
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript;
         onTranscript(transcript);
         setIsListening(false);
@@ -46,25 +71,25 @@ export default function VoiceInput({ onTranscript, language = 'en-US', disabled 
       recognitionRef.current = recognition;
     }
 
-    return () => {
-      if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch { /* ignore */ }
-      }
-    };
+    initializedRef.current = true;
+    return !!recognitionRef.current;
   }, [language, onTranscript]);
 
   const toggleListening = useCallback(() => {
-    if (!recognitionRef.current) return;
+    if (!ensureRecognition()) return;
+    const recognition = recognitionRef.current!;
 
     if (isListening) {
-      recognitionRef.current.stop();
+      recognition.stop();
       setIsListening(false);
     } else {
-      recognitionRef.current.start();
+      recognition.start();
       setIsListening(true);
     }
-  }, [isListening]);
+  }, [isListening, ensureRecognition]);
 
+  // Check support on first render without effect
+  const isSupported = typeof window !== 'undefined' && !!getSpeechRecognitionAPI();
   if (!isSupported) return null;
 
   return (

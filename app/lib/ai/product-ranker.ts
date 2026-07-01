@@ -180,15 +180,15 @@ export function rankProducts(
   const shouldPickTop = topScore >= 60 && (topScore - secondScore >= 5 || scored.length === 1);
 
   return scored.map((p, idx) => {
-    const result: Product = { ...p };
-    delete (result as any)._score;
-    delete (result as any)._reasons;
+    // Destructure to remove internal scoring fields
+    const { _score, _reasons, ...productData } = p;
+    const result: Product = { ...productData };
 
     if (idx === 0 && shouldPickTop) {
       result.kasaPick = true;
       result.matchReason =
-        p._reasons.length > 0 ? p._reasons[0] : 'Best overall match';
-      result.rankScore = p._score;
+        _reasons.length > 0 ? _reasons[0] : 'Best overall match';
+      result.rankScore = _score;
     }
 
     return result;

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ChatMessage, CartItem, Language, Mood, SmartSuggestion } from '../mcp/types';
+import type { ChatMessage, CartItem, Language, Mood, SmartSuggestion, GhostCartItem } from '../mcp/types';
 
 export interface OccasionMemory {
   person: string;
@@ -25,7 +25,7 @@ interface ChatState {
   isLoading: boolean;
   sessionId: string;
   userMemory: UserMemory;
-  ghostContext: any;
+  ghostContext: GhostCartItem[] | null;
   // v4.0
   mood: Mood;
   smartSuggestions: SmartSuggestion[];
@@ -44,7 +44,7 @@ interface ChatState {
   setDeliveryDate: (date: string) => void;
   setCart: (cart: CartItem[]) => void;
   updateUserMemory: (memory: Partial<UserMemory>) => void;
-  setGhostContext: (context: any) => void;
+  setGhostContext: (context: GhostCartItem[] | null) => void;
   // v4.0
   setMood: (mood: Mood) => void;
   setSmartSuggestions: (suggestions: SmartSuggestion[]) => void;

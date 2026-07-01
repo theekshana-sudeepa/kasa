@@ -184,7 +184,7 @@ if (typeof globalThis !== 'undefined') {
   setInterval(() => {
     const cleaned = cleanupStaleSessions();
     if (cleaned > 0) {
-      console.log(`[KASA Session] Cleaned up ${cleaned} stale sessions`);
+      if (process.env.NODE_ENV === 'development') console.log(`[KASA Session] Cleaned up ${cleaned} stale sessions`);
     }
   }, 15 * 60 * 1000);
 }

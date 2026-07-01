@@ -57,8 +57,8 @@ function getModel() {
       const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
       return { model: openai('gpt-4o-mini'), provider: 'OpenAI' };
     }
-  } catch (err) {
-    console.error('[KASA] Failed to load AI provider:', err);
+  } catch (err: unknown) {
+    if (process.env.NODE_ENV === 'development') console.error('[KASA] Failed to load AI provider:', err);
   }
   return null;
 }
@@ -160,8 +160,8 @@ async function executeMCPToolsWithIntent(
             results.push(`[SEARCH RESULTS for "${query}" (intent: ${intent.shopping_intent})]:\n${parsed}`);
             allSearchText += parsed + '\n';
           }
-        } catch (searchErr) {
-          console.warn(`[KASA MCP] Search failed for "${query}":`, searchErr);
+        } catch (searchErr: unknown) {
+          if (process.env.NODE_ENV === 'development') console.warn(`[KASA MCP] Search failed for "${query}":`, searchErr);
         }
       }
 
@@ -193,8 +193,8 @@ async function executeMCPToolsWithIntent(
       const parsed = mcpClient.parseResult<string>(trackResult);
       results.push(`[ORDER TRACKING]:\n${parsed}`);
     }
-  } catch (err) {
-    console.error('[KASA MCP] Tool error:', err);
+  } catch (err: unknown) {
+    if (process.env.NODE_ENV === 'development') console.error('[KASA MCP] Tool error:', err);
   }
 
   let combined = results.join('\n\n');
@@ -254,8 +254,8 @@ async function generateFallbackResponse(
         if (checkText.includes('Fee:')) {
           deliveryMsg += `\n\n${checkText}`;
         }
-      } catch (e) {
-        console.error('Delivery check error', e);
+      } catch {
+        /* delivery check failed — proceed without delivery info */
       }
 
       response = `${deliveryMsg}\n\nAlmost done! I just need the recipient's details to deliver the items. Please fill out the secure form below:`;
@@ -342,8 +342,7 @@ async function generateFallbackResponse(
         } else {
           throw new Error('Failed to parse order from MCP');
         }
-      } catch (err) {
-        console.error('Failed to create order', err);
+      } catch {
         response = `Oops, something went wrong creating your order. Please try again!\n\n<QUICK_REPLIES>["Confirm Order", "Cancel"]</QUICK_REPLIES>`;
       }
     }
@@ -463,7 +462,7 @@ async function generateFallbackResponse(
            const trackResult = await mcpClient.trackOrder(orderNum);
            const trackText = mcpClient.parseResult<string>(trackResult);
            response = `Here is the tracking information for order **${orderNum}**:\n\n${trackText}\n\n<QUICK_REPLIES>["Track another order", "Browse products", "Show me gifts"]</QUICK_REPLIES>`;
-        } catch (e) {
+        } catch {
            response = `I couldn't find tracking info for **${orderNum}**. Are you sure the number is correct?\n\n<QUICK_REPLIES>["Try again", "Browse products"]</QUICK_REPLIES>`;
         }
       }
@@ -487,8 +486,7 @@ async function generateFallbackResponse(
         response = `I'd love to help you shop! \u2728 Kapruka has everything \u2014 electronics, groceries, fashion, gifts, and more.\n\nWhat can I find for you? Just describe what you need!\n\n<QUICK_REPLIES>["Show me electronics", "Birthday gifts", "Browse categories", "Track my order"]</QUICK_REPLIES>`;
       }
     }
-  } catch (err) {
-    console.error('[KASA Fallback] Error:', err);
+  } catch {
     response = `I'm having a moment connecting to the shop. Let me try again!\n\n<QUICK_REPLIES>["Try again", "Browse categories", "Show me gifts"]</QUICK_REPLIES>`;
   }
 
@@ -560,7 +558,7 @@ export async function POST(request: Request) {
 
     if (modelConfig) {
       try {
-        console.log(`[KASA] Using ${modelConfig.provider}`);
+        if (process.env.NODE_ENV === 'development') console.log(`[KASA] Using ${modelConfig.provider}`);
 
         // Deep Intent Extraction (AI-powered)
         const lastAssistantMsg = getConversation(sessionId)?.slice(-1)[0]?.content || '';
@@ -574,14 +572,16 @@ export async function POST(request: Request) {
           conversationContext
         );
         
-        console.log(`[KASA] Intent:`, JSON.stringify({
-          emotion: extractedIntent.emotion,
-          mood: extractedIntent.mood,
-          intent: extractedIntent.intent_category,
-          shopping: extractedIntent.is_shopping,
-          queries: extractedIntent.search_queries,
-          confidence: extractedIntent.confidence,
-        }));
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`[KASA] Intent:`, JSON.stringify({
+            emotion: extractedIntent.emotion,
+            mood: extractedIntent.mood,
+            intent: extractedIntent.intent_category,
+            shopping: extractedIntent.is_shopping,
+            queries: extractedIntent.search_queries,
+            confidence: extractedIntent.confidence,
+          }));
+        }
 
         // Update memory with intent signals
         if (extractedIntent.occasion && extractedIntent.occasion !== 'none') {
@@ -683,13 +683,13 @@ export async function POST(request: Request) {
         }
 
         return result.toTextStreamResponse();
-      } catch (aiError) {
-        console.error(`[KASA] AI error, falling back:`, aiError);
+      } catch (aiError: unknown) {
+        if (process.env.NODE_ENV === 'development') console.error(`[KASA] AI error, falling back:`, aiError);
       }
     }
 
     // ── Step 3: Smart Fallback ──
-    console.log('[KASA] Using smart fallback (no AI key)');
+    if (process.env.NODE_ENV === 'development') console.log('[KASA] Using smart fallback (no AI key)');
     const { text: fallbackResponse } = await generateFallbackResponse(sessionId, message, cart);
 
     const encoder = new TextEncoder();
@@ -709,8 +709,8 @@ export async function POST(request: Request) {
         'Transfer-Encoding': 'chunked',
       },
     });
-  } catch (error) {
-    console.error('[KASA Chat] Error:', error);
+  } catch (error: unknown) {
+    if (process.env.NODE_ENV === 'development') console.error('[KASA Chat] Error:', error);
     const msg = error instanceof Error ? error.message : 'Something went wrong';
     return new Response(`Oops! Something went wrong: ${msg}. Please try again!`, {
       headers: { 'Content-Type': 'text/plain; charset=utf-8' },

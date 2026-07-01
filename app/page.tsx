@@ -185,8 +185,7 @@ export default function Home() {
         }
       }
 
-    } catch (error) {
-      console.error('Chat error:', error);
+    } catch {
       addMessage({
         id: `error-${Date.now()}`,
         role: 'assistant',

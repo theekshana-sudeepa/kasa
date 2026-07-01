@@ -1,20 +1,23 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useRef } from 'react';
 
 const COLORS = ['#402970', '#6747b3', '#f8da08', '#10b981', '#ef4444', '#3b82f6', '#f59e0b', '#e91e63'];
 
+function generatePieces() {
+  return Array.from({ length: 50 }, (_, i) => ({
+    id: i,
+    left: Math.random() * 100,
+    color: COLORS[Math.floor(Math.random() * COLORS.length)],
+    delay: Math.random() * 1,
+    size: 6 + Math.random() * 8,
+    rotation: Math.random() * 360,
+  }));
+}
+
 export default function Confetti() {
-  const pieces = useMemo(() => {
-    return Array.from({ length: 50 }, (_, i) => ({
-      id: i,
-      left: Math.random() * 100,
-      color: COLORS[Math.floor(Math.random() * COLORS.length)],
-      delay: Math.random() * 1,
-      size: 6 + Math.random() * 8,
-      rotation: Math.random() * 360,
-    }));
-  }, []);
+  const piecesRef = useRef(generatePieces());
+  const pieces = piecesRef.current;
 
   return (
     <div className="confetti-container">

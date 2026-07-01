@@ -165,7 +165,7 @@ export class KaprukaMCPClient {
 
       this.initialized = true;
       this.initializing = null;
-      console.log('[KASA MCP] Initialized successfully, session:', this.sessionId);
+      if (process.env.NODE_ENV === 'development') console.log('[KASA MCP] Initialized successfully, session:', this.sessionId);
     })();
 
     return this.initializing;
@@ -191,7 +191,7 @@ export class KaprukaMCPClient {
       },
     };
 
-    console.log(`[KASA MCP] Calling tool: ${name}`, JSON.stringify(args));
+    if (process.env.NODE_ENV === 'development') console.log(`[KASA MCP] Calling tool: ${name}`, JSON.stringify(args));
 
     const response = await this.sendRequest(request);
 
@@ -231,13 +231,14 @@ export class KaprukaMCPClient {
       if (name === 'kapruka_check_delivery') {
         if (!text.includes('Date:') && !text.includes('Fee:')) throw new Error('Missing delivery metadata');
       }
-    } catch (verifError: any) {
-      console.warn(`[KASA MCP] Verification failed for ${name}: ${verifError.message}`);
+    } catch (verifError: unknown) {
+      const verifMsg = verifError instanceof Error ? verifError.message : 'Unknown verification error';
+      if (process.env.NODE_ENV === 'development') console.warn(`[KASA MCP] Verification failed for ${name}: ${verifMsg}`);
       if (retryCount < 1) {
-        console.log(`[KASA MCP] Retrying ${name}...`);
+        if (process.env.NODE_ENV === 'development') console.log(`[KASA MCP] Retrying ${name}...`);
         return this.callTool(name, args, retryCount + 1);
       } else {
-        console.error(`[KASA MCP] Tool ${name} failed verification twice. Returning graceful fallback.`);
+        if (process.env.NODE_ENV === 'development') console.error(`[KASA MCP] Tool ${name} failed verification twice. Returning graceful fallback.`);
         return {
           content: [{ type: 'text', text: `Failed to execute ${name}. Please try a slightly different query or browse categories instead.` }],
           isError: true,
@@ -246,7 +247,7 @@ export class KaprukaMCPClient {
     }
     // ------------------------------------------
 
-    console.log(`[KASA MCP] Tool ${name} returned ${result.content.length} content blocks`);
+    if (process.env.NODE_ENV === 'development') console.log(`[KASA MCP] Tool ${name} returned ${result.content.length} content blocks`);
     return result;
   }
 
