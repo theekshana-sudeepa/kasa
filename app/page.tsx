@@ -175,6 +175,9 @@ export default function Home() {
                   comparison: parsedResponse.comparison,
                   categories: parsedResponse.categories,
                   checkoutForm: parsedResponse.checkoutForm,
+                  showCartSummary: parsedResponse.showCartSummary,
+                  tenSecondDecision: parsedResponse.tenSecondDecision,
+                  groupGift: parsedResponse.groupGift,
                   giftMessage: parsedResponse.giftMessage,
                   mood: parsedResponse.mood,
                   smartSuggestions: parsedResponse.smartSuggestions,
@@ -192,9 +195,9 @@ export default function Home() {
       addMessage({
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: "Aiyo! Something went wrong on my end. Make sure an API key is set in .env.local, or just try again — I'm resilient like that!",
+        content: "Something went wrong on my end. If you haven't set an API key in .env.local, products won't load. Try again or browse by category!",
         timestamp: Date.now(),
-        quickReplies: ['Try again', 'Browse categories'],
+        quickReplies: ['Try again', 'Browse categories', 'Show me gifts'],
       });
     } finally {
       setLoading(false);
