@@ -28,26 +28,15 @@ const ROBOTIC_PATTERNS = [
 ];
 
 const HUMAN_SIGNALS = [
-  /Aiyo/i,
-  /machang/i,
-  /aiya/i,
-  /amma/i,
-  /anna/i,
-  /punchi/i,
-  /aney/i,
-  /kohomada/i,
-  /mokakda/i,
-  /epa/i,
-  /patta/i,
   // Contractions show conversational tone
   /don't|won't|can't|it's|that's|here's|let's/i,
   // Conversational starters
-  /^(So|Actually|Hmm|Well|Look|Okay|Right)/i,
+  /^(So|Actually|Hmm|Well|Look|Okay|Right|Sure)/i,
   // Direct recommendations (not just options)
   /My (honest )?pick|I'd go with|Trust me|Here's why/i,
   // Personality
   /😄|😊|💔|🎂|✨|👍/,
-  // Cultural references
+  // Cultural references (places/events, NOT kinship terms)
   /Sri Lanka|Sri Lankan|Colombo|fest|Avurudu|Vesak|Poson/i,
 ];
 

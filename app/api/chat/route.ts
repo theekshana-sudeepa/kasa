@@ -77,26 +77,76 @@ async function parseProductsFromMarkdown(markdown: string): Promise<string> {
     in_stock: boolean;
   }> = [];
 
-  const productRegex = /\*\*\d+\.\s+(.+?)\*\*\s*\n\s*ID:\s*`([^`]+)`\s*·\s*LKR\s*([\d,]+)/g;
-  let match;
+  // Strategy 1: Try JSON array first (some MCP responses are structured JSON)
+  try {
+    const jsonMatch = markdown.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+    if (jsonMatch) {
+      const arr = JSON.parse(jsonMatch[0]) as Array<Record<string, unknown>>;
+      if (Array.isArray(arr) && arr.length > 0 && arr[0].product_id) {
+        for (const item of arr.slice(0, 5)) {
+          products.push({
+            product_id: String(item.product_id || item.id || ''),
+            name: String(item.name || item.title || ''),
+            price: Number(item.price || 0),
+            currency: 'LKR',
+            image_url: String(item.image_url || item.image || ''),
+            url: String(item.url || item.link || `https://www.kapruka.com/buyonline/${item.product_id || item.id}`),
+            in_stock: Boolean(item.in_stock ?? item.available ?? true),
+          });
+        }
+      }
+    }
+  } catch { /* not JSON */ }
 
-  while ((match = productRegex.exec(markdown)) !== null) {
-    const name = match[1].trim();
-    const productId = match[2].trim();
-    const price = parseInt(match[3].replace(/,/g, ''), 10);
+  // Strategy 2: Standard markdown format **N. name** \n ID: `id` · LKR price
+  if (products.length === 0) {
+    const productRegex = /\*\*\d+\.\s+(.+?)\*\*\s*\n\s*ID:\s*`([^`]+)`\s*[·•]\s*LKR\s*([\d,]+)/g;
+    let match;
+    while ((match = productRegex.exec(markdown)) !== null) {
+      const name = match[1].trim();
+      const productId = match[2].trim();
+      const price = parseInt(match[3].replace(/,/g, ''), 10);
+      const urlMatch = markdown.slice(match.index).match(/\[View product\]\((https?:\/\/[^)]+)\)/);
+      const url = urlMatch ? urlMatch[1] : `https://www.kapruka.com/buyonline/${productId}`;
+      products.push({ product_id: productId, name, price, currency: 'LKR', image_url: '', url, in_stock: true });
+    }
+  }
 
-    const urlMatch = markdown.slice(match.index).match(/\[View product\]\((https?:\/\/[^\)]+)\)/);
-    const url = urlMatch ? urlMatch[1] : `https://www.kapruka.com/buyonline/${productId}`;
+  // Strategy 3: Looser pattern — any bolded product name followed by LKR price nearby
+  if (products.length === 0) {
+    const looseRegex = /\*\*(.+?)\*\*[\s\S]{0,200}?(?:ID|id):\s*[`]?([A-Za-z0-9_-]+)[`]?[\s\S]{0,100}?LKR\s*([\d,]+)/g;
+    let match;
+    while ((match = looseRegex.exec(markdown)) !== null && products.length < 5) {
+      const name = match[1].replace(/^\d+\.\s*/, '').trim();
+      if (name.length < 3) continue;
+      const productId = match[2].trim();
+      const price = parseInt(match[3].replace(/,/g, ''), 10);
+      if (!productId || !price) continue;
+      products.push({
+        product_id: productId, name, price, currency: 'LKR', image_url: '',
+        url: `https://www.kapruka.com/buyonline/${productId}`, in_stock: true,
+      });
+    }
+  }
 
-    products.push({
-      product_id: productId,
-      name,
-      price,
-      currency: 'LKR',
-      image_url: '',
-      url,
-      in_stock: true,
-    });
+  // Strategy 4: Extract product IDs from links and names from headings
+  if (products.length === 0) {
+    const linkRegex = /\[([^\]]+)\]\(https?:\/\/(?:www\.)?kapruka\.com\/(?:buyonline\/|p\/)([A-Za-z0-9_-]+)[^)]*\)/g;
+    let match;
+    const pricePattern = /LKR\s*([\d,]+)/;
+    while ((match = linkRegex.exec(markdown)) !== null && products.length < 5) {
+      const name = match[1].trim();
+      const productId = match[2].trim();
+      const surrounding = markdown.slice(Math.max(0, match.index - 100), match.index + 200);
+      const priceMatch = surrounding.match(pricePattern);
+      const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, ''), 10) : 0;
+      if (name.length > 2 && productId) {
+        products.push({
+          product_id: productId, name, price, currency: 'LKR', image_url: '',
+          url: `https://www.kapruka.com/buyonline/${productId}`, in_stock: true,
+        });
+      }
+    }
   }
 
   if (products.length > 0) {
@@ -118,6 +168,12 @@ async function parseProductsFromMarkdown(markdown: string): Promise<string> {
             const images = data.images as string[] | undefined;
             if (images && Array.isArray(images) && images.length > 0) {
               p.image_url = images[0];
+            } else if (typeof data.image_url === 'string') {
+              p.image_url = data.image_url;
+            }
+            // Update price from detail if available
+            if (typeof data.price === 'number' && data.price > 0 && p.price === 0) {
+              p.price = data.price;
             }
           }
         } catch { /* skip */ }
@@ -369,44 +425,52 @@ async function generateFallbackResponse(
 
       // SURPRISE ME
       if (lower.match(/surprise me|random gift/i)) {
-        const categories = ['cake', 'electronic', 'flower', 'chocolate'];
-        const randomCat = categories[Math.floor(Math.random() * categories.length)];
-        const result = await mcpClient.searchProducts({ query: randomCat, in_stock_only: true, limit: 3 });
-        const text = mcpClient.parseResult<string>(result);
-        productsTag = await parseProductsFromMarkdown(text);
+        const surpriseCategories = ['birthday cake', 'gift hamper', 'premium chocolate', 'flower bouquet', 'electronics'];
+        const randomCat = surpriseCategories[Math.floor(Math.random() * surpriseCategories.length)];
+        try {
+          const result = await mcpClient.searchProducts({ query: randomCat, in_stock_only: true, limit: 4 });
+          const text = mcpClient.parseResult<string>(result);
+          productsTag = await parseProductsFromMarkdown(text);
+        } catch { /* MCP unavailable */ }
         
-        response = `**Surprise!** I've pulled some completely random, premium wildcard items for you. How about one of these?\n\n${productsTag}`;
+        if (productsTag) {
+          response = `Wildcard mode! Here's what I picked at random — you might love it. ✨\n\n${productsTag}\n\n<QUICK_REPLIES>["Show me more", "Try another surprise", "Browse by category"]</QUICK_REPLIES>`;
+        } else {
+          response = `Wildcard mode! MCP is loading up — try one of these categories to explore:\n\n<QUICK_REPLIES>["Show me cakes", "Show me flowers", "Show me electronics", "Show me gift hampers"]</QUICK_REPLIES>`;
+        }
         mood = 'excited';
       }
       // EMOTIONAL SHOPPING
       else if (heuristicIntent.is_shopping && heuristicIntent.emotion !== 'neutral' && heuristicIntent.search_queries.length > 0) {
         const emotionalPrefixes: Record<string, string> = {
-          sad: `I hear you, and I'm here to help. 💛 Let me find something perfect...`,
-          anxious: `Don't worry — I've got you covered! Let me find something right away...`,
-          excited: `That's amazing! 🎉 Let me find something to match the celebration!`,
-          romantic: `Aww, let me help you make it special! 💕`,
-          angry: `Let's fix this — I know just what to look for...`,
-          grateful: `What a thoughtful gesture! Let me find something meaningful...`,
-          urgent: `On it — no time to waste! Here's what I found:`,
+          sad: `That's rough — let me find something that'll help. 💛`,
+          anxious: `Don't worry, I'm on it! Let me find something right away.`,
+          excited: `Love that energy! 🎉 Let me find something to match the celebration!`,
+          romantic: `Let me help you make it special! 💕`,
+          angry: `Let's fix this — I know just what to look for.`,
+          grateful: `What a thoughtful gesture! Let me find something meaningful.`,
+          urgent: `On it — no time to waste!`,
         };
 
-        const prefix = emotionalPrefixes[heuristicIntent.emotion] || '';
+        const prefix = emotionalPrefixes[heuristicIntent.emotion] || 'On it!';
         const bestQuery = heuristicIntent.search_queries[0];
-        const result = await mcpClient.searchProducts({
-          query: bestQuery,
-          in_stock_only: true,
-          limit: 5,
-          ...(heuristicIntent.budget ? { max_price: heuristicIntent.budget.max } : {}),
-        });
-        const text = mcpClient.parseResult<string>(result);
-        productsTag = await parseProductsFromMarkdown(text);
+        try {
+          const result = await mcpClient.searchProducts({
+            query: bestQuery,
+            in_stock_only: true,
+            limit: 5,
+            ...(heuristicIntent.budget ? { max_price: heuristicIntent.budget.max } : {}),
+          });
+          const text = mcpClient.parseResult<string>(result);
+          productsTag = await parseProductsFromMarkdown(text);
 
-        if (!productsTag && heuristicIntent.search_queries.length > 1) {
-          const secondQuery = heuristicIntent.search_queries[1];
-          const result2 = await mcpClient.searchProducts({ query: secondQuery, in_stock_only: true, limit: 5 });
-          const text2 = mcpClient.parseResult<string>(result2);
-          productsTag = await parseProductsFromMarkdown(text2);
-        }
+          if (!productsTag && heuristicIntent.search_queries.length > 1) {
+            const secondQuery = heuristicIntent.search_queries[1];
+            const result2 = await mcpClient.searchProducts({ query: secondQuery, in_stock_only: true, limit: 5 });
+            const text2 = mcpClient.parseResult<string>(result2);
+            productsTag = await parseProductsFromMarkdown(text2);
+          }
+        } catch { /* MCP unavailable */ }
 
         if (productsTag) {
           const occasionNote = heuristicIntent.occasion !== 'none' && heuristicIntent.occasion !== 'everyday shopping'
@@ -414,45 +478,54 @@ async function generateFallbackResponse(
           const targetNote = heuristicIntent.gift_target !== 'unknown' && heuristicIntent.gift_target !== 'self'
             ? ` for your ${heuristicIntent.gift_target}` : '';
           
-          response = `${prefix}\n\nHere are some picks I think would be perfect${targetNote}${occasionNote}:\n\n${productsTag}\n\nWant me to find more options or shall we go with one of these?`;
+          response = `${prefix}\n\nThese look like great picks${targetNote}${occasionNote}:\n\n${productsTag}\n\n<QUICK_REPLIES>["Add to cart", "Show me more options", "Find something cheaper"]</QUICK_REPLIES>`;
         } else {
-          response = `${prefix}\n\nI couldn't find exact matches, but let me suggest some alternatives!\n\n<QUICK_REPLIES>["Show me flowers", "Show me chocolates", "Show me gift hampers", "Browse categories"]</QUICK_REPLIES>`;
+          response = `${prefix}\n\nI couldn't find exact matches right now — let me suggest some alternatives!\n\n<QUICK_REPLIES>["Show me flowers", "Show me chocolates", "Show me gift hampers", "Browse categories"]</QUICK_REPLIES>`;
         }
       }
       // Regular search
       else if (heuristicIntent.is_shopping && heuristicIntent.search_queries.length > 0) {
         const query = heuristicIntent.search_queries[0];
-        const result = await mcpClient.searchProducts({ query, in_stock_only: true, limit: 5 });
-        const text = mcpClient.parseResult<string>(result);
-        productsTag = await parseProductsFromMarkdown(text);
+        try {
+          const result = await mcpClient.searchProducts({ query, in_stock_only: true, limit: 5 });
+          const text = mcpClient.parseResult<string>(result);
+          productsTag = await parseProductsFromMarkdown(text);
+        } catch { /* MCP unavailable */ }
 
         if (productsTag) {
-          response = `Here are some great options I found for "${query}"! \n\n${productsTag}\n\nWould you like to know more about any of these, or shall I search for something specific?`;
+          response = `Found these for "${query}" — take a look!\n\n${productsTag}\n\n<QUICK_REPLIES>["Add to cart", "Show me more", "Compare these", "Find something cheaper"]</QUICK_REPLIES>`;
         } else {
-          response = `I searched for "${query}" but couldn't find exact matches right now. Let me suggest some alternatives!\n\n<QUICK_REPLIES>["Show me birthday gifts", "Browse categories", "Show me flowers", "Show me chocolates"]</QUICK_REPLIES>`;
+          response = `I searched for "${query}" but couldn't load results right now. Try one of these:\n\n<QUICK_REPLIES>["Show me birthday gifts", "Browse categories", "Show me flowers", "Show me chocolates"]</QUICK_REPLIES>`;
         }
       }
       // Categories
       else if (lower.includes('categor') || lower.includes('browse') || lower.includes('what do you have') || lower.includes('what can')) {
-        const result = await mcpClient.listCategories();
-        const text = mcpClient.parseResult<string>(result);
+        let text = '';
+        try {
+          const result = await mcpClient.listCategories();
+          text = mcpClient.parseResult<string>(result);
+        } catch { /* MCP unavailable */ }
         
         const categories: {name: string, url: string, slug: string}[] = [];
-        const catRegex = /-\s+\[(.*?)\]\((.*?\/([^\/]+))\)/g;
-        let match;
-        while ((match = catRegex.exec(text)) !== null) {
-           categories.push({ name: match[1], url: match[2], slug: match[3] });
+        if (text) {
+          const catRegex = /-\s+\[(.*?)\]\((.*?\/([^\/]+))\)/g;
+          let match;
+          while ((match = catRegex.exec(text)) !== null) {
+            categories.push({ name: match[1], url: match[2], slug: match[3] });
+          }
         }
 
         if (categories.length > 0) {
-          response = `Here are the categories available on Kapruka!\n\n<CATEGORIES>${JSON.stringify(categories)}</CATEGORIES>\n\n<QUICK_REPLIES>["Show me cakes", "Show me flowers", "Show me gifts", "Show me electronics"]</QUICK_REPLIES>`;
+          response = `Here's what Kapruka has in store!\n\n<CATEGORIES>${JSON.stringify(categories)}</CATEGORIES>\n\n<QUICK_REPLIES>["Show me cakes", "Show me flowers", "Show me gifts", "Show me electronics"]</QUICK_REPLIES>`;
         } else {
-          response = `Here are the categories available on Kapruka!\n\n${text}\n\n<QUICK_REPLIES>["Show me cakes", "Show me flowers", "Show me gifts", "Show me electronics"]</QUICK_REPLIES>`;
+          response = text
+            ? `Here's what Kapruka has in store!\n\n${text}\n\n<QUICK_REPLIES>["Show me cakes", "Show me flowers", "Show me gifts", "Show me electronics"]</QUICK_REPLIES>`
+            : `Kapruka has a huge range — cakes, flowers, electronics, groceries, fashion, gifts, and more.\n\n<QUICK_REPLIES>["Show me cakes", "Show me flowers", "Show me electronics", "Show me gift hampers"]</QUICK_REPLIES>`;
         }
       }
       // Gift mode
       else if (lower.includes('gift') || lower.includes('present') || lower.includes('surprise for') || lower.includes('birthday for')) {
-        response = `**Gift Mode ON!** Let me help you find the perfect gift.\n\nWho is the lucky person and what's your budget? (e.g. "For my wife, under Rs. 5000")\n\n<QUICK_REPLIES>["Show me popular gifts", "For my mom", "For my girlfriend", "Browse gift categories"]</QUICK_REPLIES>`;
+        response = `Gift mode — let's find something perfect! 🎁\n\nWho's it for and what's your budget? (e.g. "For my wife, under Rs. 5000")\n\n<QUICK_REPLIES>["Show me popular gifts", "For my mom", "For my girlfriend", "Browse gift categories"]</QUICK_REPLIES>`;
         mood = 'warm';
       }
       // Tracking Check
@@ -460,16 +533,16 @@ async function generateFallbackResponse(
         const match = message.match(/(kap\d+|vimp[a-z0-9]+)/i);
         const orderNum = match ? match[1].toUpperCase() : '';
         try {
-           const trackResult = await mcpClient.trackOrder(orderNum);
-           const trackText = mcpClient.parseResult<string>(trackResult);
-           response = `Here is the tracking information for order **${orderNum}**:\n\n${trackText}\n\n<QUICK_REPLIES>["Track another order", "Browse products", "Show me gifts"]</QUICK_REPLIES>`;
+          const trackResult = await mcpClient.trackOrder(orderNum);
+          const trackText = mcpClient.parseResult<string>(trackResult);
+          response = `Tracking info for order **${orderNum}**:\n\n${trackText}\n\n<QUICK_REPLIES>["Track another order", "Browse products", "Show me gifts"]</QUICK_REPLIES>`;
         } catch {
-           response = `I couldn't find tracking info for **${orderNum}**. Are you sure the number is correct?\n\n<QUICK_REPLIES>["Try again", "Browse products"]</QUICK_REPLIES>`;
+          response = `Couldn't find tracking info for **${orderNum}**. Is the number correct?\n\n<QUICK_REPLIES>["Try again", "Browse products"]</QUICK_REPLIES>`;
         }
       }
       // Tracking Prompt
       else if (lower.includes('track') || lower.includes('order status') || lower.includes('where is my')) {
-        response = `I can help you track your order! Please provide your Kapruka order number (e.g., VIMP34456CB2).\n\n<QUICK_REPLIES>["I don't have my order number", "Browse products instead"]</QUICK_REPLIES>`;
+        response = `Sure! Give me your Kapruka order number (e.g., VIMP34456CB2) and I'll look it up.\n\n<QUICK_REPLIES>["I don't have my order number", "Browse products instead"]</QUICK_REPLIES>`;
       }
       // Greetings
       else if (lower.match(/^(hi|hello|hey|good morning|good evening|good afternoon|howdy|sup|yo|ayubowan|vanakkam)/)) {
@@ -479,12 +552,12 @@ async function generateFallbackResponse(
         else if (hour < 18) greeting = 'Good afternoon';
         else greeting = 'Good evening';
         
-        response = `${greeting}! I'm KASA \u2014 your personal shopping concierge for Kapruka.com!\n\nI can find you anything \u2014 from electronics and groceries to birthday cakes and flowers. What are you in the mood for?\n\n<QUICK_REPLIES>["Show me trending items", "Birthday gift ideas", "Browse categories", "I need something specific"]</QUICK_REPLIES>`;
+        response = `${greeting}! I'm KASA — your shopping concierge for Kapruka.com. \n\nI can find electronics, groceries, cakes, flowers, gifts, and more. What are you looking for?\n\n<QUICK_REPLIES>["Show me trending items", "Birthday gift ideas", "Browse categories", "Surprise me!"]</QUICK_REPLIES>`;
         mood = 'warm';
       }
       // Default
       else {
-        response = `I'd love to help you shop! \u2728 Kapruka has everything \u2014 electronics, groceries, fashion, gifts, and more.\n\nWhat can I find for you? Just describe what you need!\n\n<QUICK_REPLIES>["Show me electronics", "Birthday gifts", "Browse categories", "Track my order"]</QUICK_REPLIES>`;
+        response = `I'm here to help you shop Kapruka! ✨ What are you looking for?\n\n<QUICK_REPLIES>["Show me electronics", "Birthday gifts", "Browse categories", "Track my order"]</QUICK_REPLIES>`;
       }
     }
   } catch {
