@@ -208,12 +208,12 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
         ))}
       </motion.div>
       
-      {/* Powered by Kapruka */}
+      {/* Powered by ThikkaBro */}
       <motion.div 
         variants={itemVariants}
         className="welcome-footer"
       >
-        Powered by <strong>Kapruka.com</strong> {'\uD83C\uDDF1\uD83C\uDDF0'}
+        Powered by <strong>ThikkaBro</strong> {'\uD83C\uDDF1\uD83C\uDDF0'}
       </motion.div>
     </motion.div>
   );
