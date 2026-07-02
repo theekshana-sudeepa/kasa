@@ -103,6 +103,7 @@ export interface ConversationMemory {
   recipientInfo: { name: string; phone: string; address: string } | null;
   lastSearchQueries: string[];
   conversationTone: string;
+  userName?: string;
 }
 
 // ── v4.0 — Ghost Cart (Predictive) ─────────────────────

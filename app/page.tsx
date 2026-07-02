@@ -365,12 +365,46 @@ export default function Home() {
   };
 
   return (
-    <div className="app-container">
-      <MoodBackground mood={mood} />
-      <Header onNewChat={handleNewChat} />
+    <div className="app-shell">
+      {/* ── Left Sidebar (desktop only, shown via CSS) ── */}
+      <aside className="app-sidebar" aria-label="KASA branding panel">
+        <div className="sidebar-brand">
+          <div className="sidebar-logo">K</div>
+          <div className="sidebar-name">KASA</div>
+          <div className="sidebar-tagline">Sri Lanka&apos;s most intelligent shopping companion</div>
+        </div>
 
-      <div className="chat-area" ref={chatAreaRef}>
-        <div className="messages-container">
+        <div className="sidebar-features">
+          <div className="sidebar-feature">
+            <span className="sidebar-feature-icon">🎁</span>
+            <span className="sidebar-feature-text">Smart gift finder</span>
+          </div>
+          <div className="sidebar-feature">
+            <span className="sidebar-feature-icon">🚀</span>
+            <span className="sidebar-feature-text">Same-day delivery</span>
+          </div>
+          <div className="sidebar-feature">
+            <span className="sidebar-feature-icon">🧠</span>
+            <span className="sidebar-feature-text">AI-powered search</span>
+          </div>
+          <div className="sidebar-feature">
+            <span className="sidebar-feature-icon">📦</span>
+            <span className="sidebar-feature-text">Live order tracking</span>
+          </div>
+        </div>
+
+        <div className="sidebar-footer">
+          Powered by <strong>Kapruka.com</strong>
+        </div>
+      </aside>
+
+      {/* ── Main Chat Column ── */}
+      <div className="app-container">
+        <MoodBackground mood={mood} />
+        <Header onNewChat={handleNewChat} />
+
+        <div className="chat-area" ref={chatAreaRef}>
+          <div className="messages-container">
           {!hasMessages && (
             <WelcomeScreen onChipClick={(text) => sendMessage(text)} />
           )}
@@ -607,6 +641,10 @@ export default function Home() {
         onClose={() => setCartDrawerOpen(false)}
         onCheckout={() => { setCartDrawerOpen(false); handleCheckoutFlow(); }}
       />
+      </div>
+
+      {/* ── Right Ambient Panel (very wide screens only) ── */}
+      <div className="app-ambient-right" aria-hidden="true" />
     </div>
   );
 }

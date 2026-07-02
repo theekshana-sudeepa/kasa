@@ -212,14 +212,272 @@ input, textarea {
 }
 
 /* ── App Layout ───────────────────────────────────────────── */
+/* Full-viewport design. On desktop: left sidebar + centered chat column */
 .app-container {
   display: flex;
   flex-direction: column;
   height: 100dvh;
-  max-width: 860px;
-  margin: 0 auto;
+  width: 100%;
+  max-width: 100%;
   position: relative;
   background: transparent;
+  /* On large screens, wrap inside the desktop shell */
+}
+
+/* ── Desktop Shell ────────────────────────────────────────── */
+/* The body/html background fills the full viewport */
+body {
+  background-color: var(--kasa-bg);
+}
+
+/* Full-screen ambient background layer */
+.app-shell {
+  display: flex;
+  height: 100dvh;
+  width: 100vw;
+  overflow: hidden;
+  position: relative;
+  background: var(--kasa-bg);
+}
+
+/* ── Left Sidebar Panel (desktop only) ───────────────────── */
+.app-sidebar {
+  display: none; /* hidden on mobile */
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 32px 24px;
+  width: 260px;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+  border-right: 1px solid var(--kasa-border);
+  background: linear-gradient(
+    160deg,
+    var(--kasa-surface) 0%,
+    var(--kasa-bg) 60%,
+    transparent 100%
+  );
+}
+
+.dark .app-sidebar {
+  border-right-color: rgba(45, 31, 78, 0.6);
+  background: linear-gradient(
+    160deg,
+    rgba(21, 14, 36, 0.9) 0%,
+    rgba(10, 5, 20, 0.6) 60%,
+    transparent 100%
+  );
+}
+
+/* Decorative orbs in the sidebar */
+.app-sidebar::before {
+  content: '';
+  position: absolute;
+  top: -80px;
+  left: -80px;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(124, 58, 237, 0.14) 0%, transparent 70%);
+  pointer-events: none;
+  animation: sidebar-orb-1 8s ease-in-out infinite alternate;
+}
+
+.app-sidebar::after {
+  content: '';
+  position: absolute;
+  bottom: 40px;
+  right: -60px;
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(244, 114, 182, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+  animation: sidebar-orb-2 10s ease-in-out infinite alternate;
+}
+
+@keyframes sidebar-orb-1 {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(20px, 30px) scale(1.1); }
+}
+
+@keyframes sidebar-orb-2 {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(-15px, -20px) scale(1.08); }
+}
+
+.sidebar-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.sidebar-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  background: linear-gradient(135deg, var(--kasa-primary-600), var(--kasa-primary-400), var(--kasa-coral));
+  background-size: 200% 200%;
+  animation: logo-shift 6s ease-in-out infinite alternate;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  font-weight: 900;
+  color: white;
+  letter-spacing: -0.04em;
+  box-shadow: 0 8px 32px rgba(124, 58, 237, 0.35), 0 0 0 1px rgba(255,255,255,0.1);
+}
+
+@keyframes logo-shift {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+
+.sidebar-name {
+  font-size: 22px;
+  font-weight: 900;
+  background: linear-gradient(135deg, var(--kasa-primary-600), var(--kasa-primary-400));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.04em;
+}
+
+.sidebar-tagline {
+  font-size: 12px;
+  color: var(--kasa-text-3);
+  text-align: center;
+  line-height: 1.5;
+  max-width: 160px;
+}
+
+/* Decorative feature dots */
+.sidebar-features {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+}
+
+.sidebar-feature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--kasa-surface-2);
+  border: 1px solid var(--kasa-border);
+  opacity: 0.8;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+.dark .sidebar-feature {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(45,31,78,0.5);
+}
+
+.sidebar-feature:hover {
+  opacity: 1;
+  transform: translateX(3px);
+}
+
+.sidebar-feature-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.sidebar-feature-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--kasa-text-2);
+}
+
+.sidebar-footer {
+  font-size: 11px;
+  color: var(--kasa-text-3);
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Center Chat Column ───────────────────────────────────── */
+.app-chat-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+  /* Soft fade edges on desktop to blend into bg */
+}
+
+/* Soft fade on the right edge on large screens */
+@media (min-width: 1080px) {
+  .app-chat-column::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 60px;
+    background: linear-gradient(to right, transparent, var(--kasa-bg));
+    pointer-events: none;
+    z-index: 2;
+  }
+}
+
+/* Inner chat container — constrains readable width */
+.chat-column-inner {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  max-width: 860px;
+  width: 100%;
+  margin: 0 auto;
+  min-height: 0;
+}
+
+/* ── Right Ambient Panel (largest screens) ───────────────── */
+.app-ambient-right {
+  display: none;
+  width: 200px;
+  flex-shrink: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.app-ambient-right::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to left,
+    var(--kasa-bg) 0%,
+    transparent 100%
+  );
+}
+
+.app-ambient-right::after {
+  content: '';
+  position: absolute;
+  top: 20%;
+  right: -40px;
+  width: 280px;
+  height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.06) 0%, transparent 70%);
+  animation: ambient-right 12s ease-in-out infinite alternate;
+}
+
+@keyframes ambient-right {
+  0% { transform: translate(0, 0); }
+  100% { transform: translate(-20px, 40px); }
 }
 
 /* ── Header ───────────────────────────────────────────────── */
@@ -2239,14 +2497,6 @@ input, textarea {
 
 /* ── Mobile Responsive ────────────────────────────────────── */
 @media (max-width: 768px) {
-  .app-container {
-    max-width: 100%;
-  }
-
-  .app-container::before {
-    display: none; /* Simplify on mobile for performance */
-  }
-
   .header {
     padding: 8px 14px;
   }
@@ -2306,6 +2556,56 @@ input, textarea {
   .product-carousel-wrapper::before,
   .product-carousel-wrapper::after {
     width: 12px;
+  }
+}
+
+/* ── Desktop Layout (sidebar + full-viewport) ────────────────── */
+@media (min-width: 1080px) {
+  /* The entire page becomes an app-shell flex row */
+  body {
+    overflow: hidden;
+  }
+
+  /* app-container now fills the center column */
+  .app-container {
+    max-width: unset;
+    width: 100%;
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Show the sidebar */
+  .app-sidebar {
+    display: flex;
+  }
+
+  /* Header becomes full-width within its column */
+  .header {
+    border-radius: 0;
+  }
+
+  /* Widen the messages container slightly on desktop */
+  .messages-container {
+    max-width: 780px;
+  }
+
+  .chat-input-wrapper {
+    max-width: 780px;
+  }
+
+  .chat-input-actions {
+    max-width: 780px;
+  }
+}
+
+/* Very wide screens — show the right ambient panel */
+@media (min-width: 1440px) {
+  .app-ambient-right {
+    display: block;
+  }
+
+  .messages-container {
+    max-width: 800px;
   }
 }
 

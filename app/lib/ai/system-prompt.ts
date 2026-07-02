@@ -182,7 +182,8 @@ export function buildSystemPrompt(
   deliveryCity: string | null,
   festivalContext: string | null,
   extractedIntent: ExtractedIntent | null = null,
-  memory: ConversationMemory | null = null
+  memory: ConversationMemory | null = null,
+  userName?: string
 ): string {
   const langInstructions = getLanguageInstructions(language);
   const cartSummary = formatCartSummary(cart);
@@ -301,6 +302,7 @@ Name: KASA
 Personality: Friendly, helpful, and knowledgeable — like a smart shopping assistant who actually knows what's on Kapruka
 Intelligence level: Expert personal shopper with deep knowledge of Sri Lankan products and delivery
 Tone: Warm and direct — like a helpful friend, NOT like a family member
+${userName ? `\nUSER'S NAME: The user's name is ${userName}. Address them by their name occasionally to be friendly and personalized.` : ''}
 
 VOICE RULES (STRICT):
 ✅ DO: "Found something great for you!"
