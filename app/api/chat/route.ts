@@ -1,4 +1,5 @@
 import { streamText } from 'ai';
+import { checkRateLimit, rateLimitResponse, sanitizeInput } from '@/app/lib/security/rate-limiter';
 import { buildSystemPrompt, getFestivalContext } from '@/app/lib/ai/system-prompt';
 import { getMCPClient } from '@/app/lib/mcp/client';
 import { extractIntent, extractIntentFallback, emotionToMood } from '@/app/lib/ai/intent-extractor';
@@ -528,15 +529,22 @@ function enrichResponseWithProducts(
 // ── Main POST Handler ───────────────────────────────────────────
 export async function POST(request: Request) {
   try {
+    // ── Rate Limiting ──
+    const { limited, resetAt } = checkRateLimit(request, { maxRequests: 30, windowMs: 60_000 });
+    if (limited) return rateLimitResponse(resetAt);
+
     const body = (await request.json()) as ChatRequestBody;
     const {
-      message,
+      message: rawMessage,
       sessionId,
       language = 'en',
       cart = [],
       giftMode = false,
       deliveryCity,
     } = body;
+
+    // ── Input Sanitization ──
+    const message = sanitizeInput(rawMessage);
 
     if (!message || !sessionId) {
       return new Response('Please type a message to get started!', {

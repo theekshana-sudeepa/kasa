@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic } from 'lucide-react';
 
@@ -88,9 +88,12 @@ export default function VoiceInput({ onTranscript, language = 'en-US', disabled 
     }
   }, [isListening, ensureRecognition]);
 
-  // Check support on first render without effect
-  const isSupported = typeof window !== 'undefined' && !!getSpeechRecognitionAPI();
-  if (!isSupported) return null;
+  // Defer browser API check to avoid hydration mismatch
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
+  if (!mounted) return null;
+  if (!getSpeechRecognitionAPI()) return null;
 
   return (
     <motion.button

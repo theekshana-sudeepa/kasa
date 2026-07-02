@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Activity, Users, Zap, Brain, Ghost,
-  MessageSquare, TrendingUp, Clock, ArrowLeft
+  MessageSquare, TrendingUp, Clock, ArrowLeft, Server, Shield
 } from 'lucide-react';
 import Link from 'next/link';
 import './dashboard.css';
@@ -182,7 +182,7 @@ export default function DashboardPage() {
         <motion.div className="dash-panel" custom={6} variants={cardVariants} initial="hidden" animate="visible">
           <h3 className="dash-panel-title"><Brain size={16} /> Mood Distribution</h3>
           <div className="dash-mood-bars">
-            {moodEntries.length > 0 ? moodEntries.map(([mood, count]) => (
+            {moodEntries.length > 0 && moodEntries.some(([, v]) => v > 0) ? moodEntries.map(([mood, count]) => (
               <div key={mood} className="dash-mood-row">
                 <span className="dash-mood-label">{MOOD_LABELS[mood] || mood}</span>
                 <div className="dash-mood-bar-bg">
@@ -197,7 +197,51 @@ export default function DashboardPage() {
                 <span className="dash-mood-count">{count}</span>
               </div>
             )) : (
-              <p style={{ color: 'var(--kasa-text-3)', fontSize: '13px' }}>No mood data yet. Start chatting!</p>
+              <div className="dash-mood-empty">
+                {/* Decorative donut chart placeholder */}
+                <svg width="120" height="120" viewBox="0 0 120 120" style={{ margin: '0 auto 16px' }}>
+                  {Object.entries(MOOD_COLORS).map(([, color], i) => {
+                    const total = Object.keys(MOOD_COLORS).length;
+                    const angle = (360 / total) * i - 90;
+                    const endAngle = (360 / total) * (i + 1) - 90;
+                    const r = 45;
+                    const cx = 60, cy = 60;
+                    const x1 = cx + r * Math.cos(angle * Math.PI / 180);
+                    const y1 = cy + r * Math.sin(angle * Math.PI / 180);
+                    const x2 = cx + r * Math.cos(endAngle * Math.PI / 180);
+                    const y2 = cy + r * Math.sin(endAngle * Math.PI / 180);
+                    return (
+                      <motion.path
+                        key={i}
+                        d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2} Z`}
+                        fill={color}
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 0.15, scale: 1 }}
+                        transition={{ delay: 0.8 + i * 0.1, duration: 0.5 }}
+                      />
+                    );
+                  })}
+                  <circle cx="60" cy="60" r="28" fill="var(--kasa-surface)" />
+                  <motion.text
+                    x="60" y="63"
+                    textAnchor="middle"
+                    fill="var(--kasa-text-3)"
+                    fontSize="11"
+                    fontWeight="600"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 1.5 }}
+                  >
+                    0
+                  </motion.text>
+                </svg>
+                <p style={{ color: 'var(--kasa-text-3)', fontSize: '13px', textAlign: 'center', margin: 0 }}>
+                  No mood data yet
+                </p>
+                <p style={{ color: 'var(--kasa-text-3)', fontSize: '11px', textAlign: 'center', margin: '4px 0 0', opacity: 0.6 }}>
+                  Start chatting to see emotional intelligence insights
+                </p>
+              </div>
             )}
           </div>
         </motion.div>
@@ -231,6 +275,37 @@ export default function DashboardPage() {
           </div>
         </motion.div>
       </div>
+
+      {/* System Info */}
+      <motion.div className="dash-system-info" custom={8} variants={cardVariants} initial="hidden" animate="visible">
+        <h3 className="dash-system-info-title"><Server size={14} /> System Info</h3>
+        <div className="dash-system-info-grid">
+          <div className="dash-system-info-item">
+            <div className="dash-system-info-label">Version</div>
+            <div className="dash-system-info-value">KASA v1.1.0</div>
+          </div>
+          <div className="dash-system-info-item">
+            <div className="dash-system-info-label">Framework</div>
+            <div className="dash-system-info-value">Next.js 16</div>
+          </div>
+          <div className="dash-system-info-item">
+            <div className="dash-system-info-label">AI Provider</div>
+            <div className="dash-system-info-value">Auto-detect</div>
+          </div>
+          <div className="dash-system-info-item">
+            <div className="dash-system-info-label">MCP Endpoint</div>
+            <div className="dash-system-info-value" style={{ fontSize: '11px', wordBreak: 'break-all' }}>mcp.kapruka.com</div>
+          </div>
+          <div className="dash-system-info-item">
+            <div className="dash-system-info-label"><Shield size={10} style={{ verticalAlign: 'middle' }} /> Security</div>
+            <div className="dash-system-info-value" style={{ color: 'var(--kasa-success)' }}>Rate-limited + CSP</div>
+          </div>
+          <div className="dash-system-info-item">
+            <div className="dash-system-info-label">PWA</div>
+            <div className="dash-system-info-value" style={{ color: 'var(--kasa-success)' }}>Enabled</div>
+          </div>
+        </div>
+      </motion.div>
     </div>
   );
 }

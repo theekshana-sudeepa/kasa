@@ -1,12 +1,10 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import dynamic from 'next/dynamic';
 import { useChatStore } from './lib/store/chat-store';
 import Header from './components/Header';
 import WelcomeScreen from './components/WelcomeScreen';
-import CheckoutForm from './components/CheckoutForm';
-import ComparisonTable from './components/ComparisonTable';
-import CartSummary from './components/CartSummary';
 import TypingIndicator from './components/TypingIndicator';
 import ProductCarousel from './components/ProductCarousel';
 import QuickReplies from './components/QuickReplies';
@@ -14,11 +12,7 @@ import DeliveryCard from './components/DeliveryCard';
 import OrderCard from './components/OrderCard';
 import TrackingCard from './components/TrackingCard';
 import CartBadge from './components/CartBadge';
-import CartDrawer from './components/CartDrawer';
 import CategoryGrid from './components/CategoryGrid';
-import TenSecondDecision from './components/TenSecondDecision';
-import GroupGiftLink from './components/GroupGiftLink';
-import GiftMessageCard from './components/GiftMessageCard';
 import MoodBackground from './components/MoodBackground';
 import VoiceInput from './components/VoiceInput';
 import SmartSuggestions from './components/SmartSuggestions';
@@ -27,6 +21,15 @@ import { parseAssistantResponse } from './lib/ai/response-parser';
 import { ChevronDown, Gift, Package, LayoutGrid, ShoppingCart } from 'lucide-react';
 import KasaAvatar from './components/KasaAvatar';
 import { t } from './lib/i18n/translations';
+
+// Lazy load heavy components — only loaded when needed
+const CheckoutForm = dynamic(() => import('./components/CheckoutForm'), { ssr: false });
+const ComparisonTable = dynamic(() => import('./components/ComparisonTable'), { ssr: false });
+const CartDrawer = dynamic(() => import('./components/CartDrawer'), { ssr: false });
+const CartSummary = dynamic(() => import('./components/CartSummary'), { ssr: false });
+const TenSecondDecision = dynamic(() => import('./components/TenSecondDecision'), { ssr: false });
+const GroupGiftLink = dynamic(() => import('./components/GroupGiftLink'), { ssr: false });
+const GiftMessageCard = dynamic(() => import('./components/GiftMessageCard'), { ssr: false });
 
 export default function Home() {
   const {
