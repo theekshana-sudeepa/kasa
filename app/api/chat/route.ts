@@ -35,6 +35,7 @@ interface ChatRequestBody {
   giftMode: boolean;
   deliveryCity?: string;
   deliveryDate?: string;
+  userName?: string;  // User's preferred name for personalization
 }
 
 // ── AI Model Provider ───────────────────────────────────────────
@@ -614,6 +615,8 @@ export async function POST(request: Request) {
       cart = [],
       giftMode = false,
       deliveryCity,
+      deliveryDate,
+      userName,
     } = body;
 
     // ── Input Sanitization ──
@@ -632,7 +635,10 @@ export async function POST(request: Request) {
     if (deliveryCity && !updatedMemory.deliveryCity) {
       updatedMemory.deliveryCity = deliveryCity;
     }
-    setMemory(sessionId, updatedMemory);
+    // Store user name in memory for the session
+    if (userName) {
+      updatedMemory.userName = userName;
+    }
 
     // ── Step 2: Try AI-powered response ──
     const modelConfig = getModel();
@@ -684,7 +690,8 @@ export async function POST(request: Request) {
         const festivalContext = getFestivalContext();
         const systemPrompt = buildSystemPrompt(
           language, giftMode, cart, deliveryCity ?? null,
-          festivalContext, extractedIntent, updatedMemory
+          festivalContext, extractedIntent, updatedMemory,
+          userName
         );
         const mcpData = await executeMCPToolsWithIntent(message, extractedIntent);
 
@@ -771,7 +778,7 @@ export async function POST(request: Request) {
 
     // ── Step 3: Smart Fallback ──
     if (process.env.NODE_ENV === 'development') console.log('[KASA] Using smart fallback (no AI key)');
-    const { text: fallbackResponse } = await generateFallbackResponse(sessionId, message, cart);
+    const { text: fallbackResponse } = await generateFallbackResponse(sessionId, message, cart, userName);
 
     const encoder = new TextEncoder();
     const stream = new ReadableStream({

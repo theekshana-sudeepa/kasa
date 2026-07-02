@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { useChatStore } from './lib/store/chat-store';
 import Header from './components/Header';
 import WelcomeScreen from './components/WelcomeScreen';
+import NameCaptureCard from './components/NameCaptureCard';
 import TypingIndicator from './components/TypingIndicator';
 import ProductCarousel from './components/ProductCarousel';
 import QuickReplies from './components/QuickReplies';
@@ -42,21 +43,49 @@ export default function Home() {
     isLoading,
     sessionId,
     mood,
+    userName,
     addMessage,
     setLoading,
     setCart,
     toggleGiftMode,
     setMood,
     setSmartSuggestions,
+    setUserName,
   } = useChatStore();
 
 
   const [input, setInput] = useState('');
   const [cartDrawerOpen, setCartDrawerOpen] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  // Name capture state
+  const [nameCapturePending, setNameCapturePending] = useState(false);
+  const [pendingQuery, setPendingQuery] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // ── Name extraction helper ──────────────────────────────────────
+  /**
+   * Try to extract a person's name from a raw text message.
+   * Handles: "I'm Alex", "My name is Alex", "Alex", "Call me Alex"
+   */
+  function extractNameFromMessage(msg: string): string | null {
+    const clean = msg.trim();
+    // Direct name intro patterns
+    const patterns = [
+      /^(?:i[''']m|i am|my name is|call me|they call me|you can call me|it[''']s)\s+([a-z][a-z\-]{0,29})/i,
+      /^([a-z][a-z\-]{0,29})(?:\s+here)?[.!]?$/i, // Single word reply like "Alex" or "Alex!"
+    ];
+    for (const p of patterns) {
+      const m = clean.match(p);
+      if (m && m[1]) {
+        // Quick sanity: reject if it's a common non-name word
+        const reject = /^(hi|hey|hello|yes|no|ok|okay|sure|skip|later|none|na|nah|bot|kasa)$/i;
+        if (!reject.test(m[1])) return m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
+      }
+    }
+    return null;
+  }
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -94,6 +123,50 @@ export default function Home() {
   const sendMessage = useCallback(async (text: string) => {
     if (!text.trim() || isLoading) return;
 
+    // ── Name capture intercept ──
+    // If we don't know the user's name and this is their first message,
+    // show a name-ask card FIRST, then fire the real query after.
+    if (!userName && messages.length === 0 && !nameCapturePending) {
+      // Add user message to chat
+      addMessage({
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: text.trim(),
+        timestamp: Date.now(),
+      });
+      setInput('');
+      // Hold the original query
+      setPendingQuery(text.trim());
+      // Inject the name-capture assistant message
+      addMessage({
+        id: `name-capture-${Date.now()}`,
+        role: 'assistant',
+        content: '__NAME_CAPTURE__',  // Special sentinel rendered as NameCaptureCard
+        timestamp: Date.now(),
+      });
+      setNameCapturePending(true);
+      return;
+    }
+
+    // ── If name capture is pending: user typed a name instead of using the card ──
+    if (nameCapturePending) {
+      const detectedName = extractNameFromMessage(text.trim());
+      if (detectedName) {
+        setUserName(detectedName);
+        setNameCapturePending(false);
+        // Remove name-capture message from UI
+        useChatStore.setState((s) => ({
+          messages: s.messages.filter((m) => !m.content.startsWith('__NAME_CAPTURE__')),
+        }));
+        // Fire the original query
+        if (pendingQuery) {
+          setPendingQuery(null);
+          await sendMessage(pendingQuery);
+        }
+        return;
+      }
+    }
+
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -106,6 +179,13 @@ export default function Home() {
 
     if (inputRef.current) {
       inputRef.current.style.height = 'auto';
+    }
+
+    // ── Passive name detection in ongoing chat ──
+    // Catch: "by the way I'm Alex", "call me Sam"
+    if (!userName) {
+      const detectedName = extractNameFromMessage(text.trim());
+      if (detectedName) setUserName(detectedName);
     }
 
     const assistantMsgId = `assistant-${Date.now()}`;
@@ -122,6 +202,7 @@ export default function Home() {
           giftMode,
           deliveryCity,
           deliveryDate,
+          userName: userName || undefined,
         }),
       });
 
@@ -202,7 +283,9 @@ export default function Home() {
     } finally {
       setLoading(false);
     }
-  }, [isLoading, sessionId, language, cart, giftMode, deliveryCity, deliveryDate, addMessage, setLoading, setCart, setMood, setSmartSuggestions]);
+  }, [isLoading, sessionId, language, cart, giftMode, deliveryCity, deliveryDate, userName,
+      nameCapturePending, pendingQuery, messages.length,
+      addMessage, setLoading, setCart, setMood, setSmartSuggestions, setUserName]);
 
   const handleSend = () => sendMessage(input);
 
@@ -305,6 +388,39 @@ export default function Home() {
                 </div>
               ) : (
                 <div>
+                  {/* ── Name Capture Card (special sentinel message) ── */}
+                  {msg.content === '__NAME_CAPTURE__' ? (
+                    <div className="message message-assistant">
+                      <KasaAvatar />
+                      <div>
+                        <NameCaptureCard
+                          onSubmit={(name) => {
+                            setUserName(name);
+                            setNameCapturePending(false);
+                            // Remove the sentinel message
+                            useChatStore.setState((s) => ({
+                              messages: s.messages.filter((m) => m.content !== '__NAME_CAPTURE__'),
+                            }));
+                            // Fire the held query with the known name
+                            if (pendingQuery) {
+                              setPendingQuery(null);
+                              sendMessage(pendingQuery);
+                            }
+                          }}
+                          onSkip={() => {
+                            setNameCapturePending(false);
+                            useChatStore.setState((s) => ({
+                              messages: s.messages.filter((m) => m.content !== '__NAME_CAPTURE__'),
+                            }));
+                            if (pendingQuery) {
+                              setPendingQuery(null);
+                              sendMessage(pendingQuery);
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ) : (
                   <div className="message message-assistant">
                     <KasaAvatar />
                     <div>
@@ -319,6 +435,8 @@ export default function Home() {
                       <div className="message-time">{formatTime(msg.timestamp)}</div>
                     </div>
                   </div>
+                  )}
+
 
                   {msg.products && msg.products.length > 0 && (
                     <ProductCarousel products={msg.products} />

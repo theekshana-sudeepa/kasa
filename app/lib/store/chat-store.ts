@@ -26,6 +26,7 @@ interface ChatState {
   sessionId: string;
   userMemory: UserMemory;
   ghostContext: GhostCartItem[] | null;
+  userName: string | null;  // Persisted user name
   // v4.0
   mood: Mood;
   smartSuggestions: SmartSuggestion[];
@@ -45,6 +46,7 @@ interface ChatState {
   setCart: (cart: CartItem[]) => void;
   updateUserMemory: (memory: Partial<UserMemory>) => void;
   setGhostContext: (context: GhostCartItem[] | null) => void;
+  setUserName: (name: string) => void;
   // v4.0
   setMood: (mood: Mood) => void;
   setSmartSuggestions: (suggestions: SmartSuggestion[]) => void;
@@ -69,6 +71,7 @@ export const useChatStore = create<ChatState>()(
       sessionId: SESSION_ID,
       userMemory: {},
       ghostContext: null,
+      userName: null,
       mood: 'neutral' as Mood,
       smartSuggestions: [],
       voiceMode: false,
@@ -150,13 +153,15 @@ export const useChatStore = create<ChatState>()(
 
   setGhostContext: (context) => set({ ghostContext: context }),
 
+  setUserName: (name) => set({ userName: name.trim() }),
+
   setMood: (mood) => set({ mood }),
 
   setSmartSuggestions: (suggestions) => set({ smartSuggestions: suggestions }),
 
   toggleVoiceMode: () => set((state) => ({ voiceMode: !state.voiceMode })),
 
-  newChat: () => set({
+  newChat: () => set((state) => ({
     messages: [],
     isLoading: false,
     mood: 'neutral' as Mood,
@@ -165,12 +170,15 @@ export const useChatStore = create<ChatState>()(
     deliveryDate: null,
     giftMode: false,
     sessionId: 'kasa-' + Math.random().toString(36).slice(2, 10),
-  }),
+    // Preserve userName and userMemory across new chats
+    userName: state.userName,
+    userMemory: state.userMemory,
+  })),
     }),
     {
       name: 'kasa-storage',
       // We only want to persist the userMemory, not active session stuff like current cart/messages
-      partialize: (state) => ({ userMemory: state.userMemory }),
+      partialize: (state) => ({ userMemory: state.userMemory, userName: state.userName }),
     }
   )
 );
