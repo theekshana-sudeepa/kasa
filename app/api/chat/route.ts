@@ -266,7 +266,8 @@ async function executeMCPToolsWithIntent(
 async function generateFallbackResponse(
   sessionId: string,
   message: string,
-  cart: CartItem[] = []
+  cart: CartItem[] = [],
+  userName?: string
 ): Promise<{ text: string; mood: Mood }> {
   const mcpClient = getMCPClient();
   const lower = message.toLowerCase();
