@@ -235,51 +235,50 @@ export default function Home() {
           if (chunk) fullText += chunk;
         }
 
-        if (!fullText) {
-          if (done) break;
-          continue;
+        if (fullText) {
+          const parsedResponse = parseAssistantResponse(fullText);
+
+          // v4.0 — Sync mood from AI response
+          if (parsedResponse.mood) {
+            setMood(parsedResponse.mood);
+          }
+
+          // v4.0 — Sync smart suggestions
+          if (parsedResponse.smartSuggestions && parsedResponse.smartSuggestions.length > 0) {
+            setSmartSuggestions(parsedResponse.smartSuggestions);
+          }
+
+          useChatStore.setState((state) => ({
+            messages: state.messages.map((m) =>
+              m.id === assistantMsgId
+                ? {
+                    ...m,
+                    content: parsedResponse.text,
+                    products: parsedResponse.products,
+                    quickReplies: parsedResponse.quickReplies,
+                    delivery: parsedResponse.delivery,
+                    order: parsedResponse.order,
+                    tracking: parsedResponse.tracking,
+                    comparison: parsedResponse.comparison,
+                    categories: parsedResponse.categories,
+                    checkoutForm: parsedResponse.checkoutForm,
+                    showCartSummary: parsedResponse.showCartSummary,
+                    tenSecondDecision: parsedResponse.tenSecondDecision,
+                    groupGift: parsedResponse.groupGift,
+                    giftMessage: parsedResponse.giftMessage,
+                    mood: parsedResponse.mood,
+                    smartSuggestions: parsedResponse.smartSuggestions,
+                  }
+                : m
+            ),
+          }));
+
+          if (parsedResponse.cartUpdate && parsedResponse.cartUpdate.length > 0) {
+            setCart(parsedResponse.cartUpdate);
+          }
         }
-
-        const parsedResponse = parseAssistantResponse(fullText);
-
-        // v4.0 — Sync mood from AI response
-        if (parsedResponse.mood) {
-          setMood(parsedResponse.mood);
-        }
-
-        // v4.0 — Sync smart suggestions
-        if (parsedResponse.smartSuggestions && parsedResponse.smartSuggestions.length > 0) {
-          setSmartSuggestions(parsedResponse.smartSuggestions);
-        }
-
-        useChatStore.setState((state) => ({
-          messages: state.messages.map((m) =>
-            m.id === assistantMsgId
-              ? {
-                  ...m,
-                  content: parsedResponse.text,
-                  products: parsedResponse.products,
-                  quickReplies: parsedResponse.quickReplies,
-                  delivery: parsedResponse.delivery,
-                  order: parsedResponse.order,
-                  tracking: parsedResponse.tracking,
-                  comparison: parsedResponse.comparison,
-                  categories: parsedResponse.categories,
-                  checkoutForm: parsedResponse.checkoutForm,
-                  showCartSummary: parsedResponse.showCartSummary,
-                  tenSecondDecision: parsedResponse.tenSecondDecision,
-                  groupGift: parsedResponse.groupGift,
-                  giftMessage: parsedResponse.giftMessage,
-                  mood: parsedResponse.mood,
-                  smartSuggestions: parsedResponse.smartSuggestions,
-                }
-              : m
-          ),
-        }));
-
-        if (parsedResponse.cartUpdate && parsedResponse.cartUpdate.length > 0) {
-          setCart(parsedResponse.cartUpdate);
-        }
+        
+        if (done) break;
       }
 
     } catch {
