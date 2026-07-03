@@ -208,7 +208,6 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
         ))}
       </motion.div>
       
-      {/* Powered by ThikkaBro */}
       <motion.div 
         variants={itemVariants}
         className="welcome-footer"

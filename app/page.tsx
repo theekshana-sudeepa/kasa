@@ -393,9 +393,6 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="sidebar-footer">
-          Powered by <strong>Kapruka.com</strong>
-        </div>
       </aside>
 
       {/* ── Main Chat Column ── */}
