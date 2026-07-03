@@ -225,10 +225,20 @@ export default function Home() {
 
       while (true) {
         const { done, value } = await reader.read();
-        if (done) break;
+        
+        if (value) {
+          const chunk = decoder.decode(value, { stream: !done });
+          fullText += chunk;
+        } else if (done) {
+          // Flush the decoder just in case
+          const chunk = decoder.decode();
+          if (chunk) fullText += chunk;
+        }
 
-        const chunk = decoder.decode(value, { stream: true });
-        fullText += chunk;
+        if (!fullText) {
+          if (done) break;
+          continue;
+        }
 
         const parsedResponse = parseAssistantResponse(fullText);
 

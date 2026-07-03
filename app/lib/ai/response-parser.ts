@@ -45,70 +45,84 @@ function safeParse<T>(raw: string): T | null {
   }
 }
 
-function extractTag<T>(
-  text: string,
-  tagName: string
-): { data: T | null; cleaned: string } {
+export function extractTag<T>(text: string, tagName: string): { data: T | null; cleaned: string } {
   const openTag = `<${tagName}>`;
   const closeTag = `</${tagName}>`;
-
+  
   let cleaned = text;
   let parsed: T | null = null;
-  let isStreaming = false;
-
-  while (cleaned.includes(openTag)) {
-    const startIdx = cleaned.indexOf(openTag);
-    const contentStart = startIdx + openTag.length;
-    const endIdx = cleaned.indexOf(closeTag, contentStart);
-
-    if (endIdx === -1) {
-      // Tag is open but not closed yet (streaming).
-      isStreaming = true;
-      cleaned = cleaned.slice(0, startIdx).trim();
-      break;
+  
+  const lastCloseIdx = text.lastIndexOf(closeTag);
+  
+  if (lastCloseIdx !== -1) {
+    const matchingOpenIdx = text.lastIndexOf(openTag, lastCloseIdx);
+    
+    if (matchingOpenIdx !== -1) {
+      const rawContent = text.slice(matchingOpenIdx + openTag.length, lastCloseIdx).trim();
+      const tryParse = safeParse<T>(rawContent);
+      if (tryParse) {
+        parsed = tryParse;
+      }
     }
-
-    const rawContent = cleaned.slice(contentStart, endIdx).trim();
-    const tryParse = safeParse<T>(rawContent);
-    if (tryParse) {
-      parsed = tryParse; // Keep the last valid parsed data
-    }
-    cleaned = (cleaned.slice(0, startIdx) + cleaned.slice(endIdx + closeTag.length)).trim();
   }
 
-  // If we are currently streaming a tag, we return the previously parsed valid tag (if any)
-  // or null, so the UI doesn't crash.
-  return { data: parsed, cleaned };
+  while(cleaned.includes(closeTag)) {
+    const cIdx = cleaned.indexOf(closeTag);
+    const oIdx = cleaned.lastIndexOf(openTag, cIdx);
+    if (oIdx !== -1) {
+      cleaned = cleaned.slice(0, oIdx) + cleaned.slice(cIdx + closeTag.length);
+    } else {
+      cleaned = cleaned.slice(0, cIdx) + cleaned.slice(cIdx + closeTag.length);
+    }
+  }
+  
+  while (cleaned.includes(openTag)) {
+    const oIdx = cleaned.indexOf(openTag);
+    cleaned = cleaned.slice(0, oIdx);
+  }
+
+  return { 
+    data: parsed, 
+    cleaned: cleaned.trim() 
+  };
 }
 
-/**
- * Extract a simple text tag (not JSON).
- */
-function extractTextTag(
-  text: string,
-  tagName: string
-): { value: string | null; cleaned: string } {
+export function extractTextTag(text: string, tagName: string): { data: string | null; cleaned: string } {
   const openTag = `<${tagName}>`;
   const closeTag = `</${tagName}>`;
-
+  
   let cleaned = text;
-  let lastValue: string | null = null;
-
-  while (cleaned.includes(openTag)) {
-    const startIdx = cleaned.indexOf(openTag);
-    const contentStart = startIdx + openTag.length;
-    const endIdx = cleaned.indexOf(closeTag, contentStart);
-
-    if (endIdx === -1) {
-      cleaned = cleaned.slice(0, startIdx).trim();
-      break;
+  let parsed: string | null = null;
+  
+  const lastCloseIdx = text.lastIndexOf(closeTag);
+  
+  if (lastCloseIdx !== -1) {
+    const matchingOpenIdx = text.lastIndexOf(openTag, lastCloseIdx);
+    
+    if (matchingOpenIdx !== -1) {
+      parsed = text.slice(matchingOpenIdx + openTag.length, lastCloseIdx).trim();
     }
-
-    lastValue = cleaned.slice(contentStart, endIdx).trim();
-    cleaned = (cleaned.slice(0, startIdx) + cleaned.slice(endIdx + closeTag.length)).trim();
   }
 
-  return { value: lastValue, cleaned };
+  while(cleaned.includes(closeTag)) {
+    const cIdx = cleaned.indexOf(closeTag);
+    const oIdx = cleaned.lastIndexOf(openTag, cIdx);
+    if (oIdx !== -1) {
+      cleaned = cleaned.slice(0, oIdx) + cleaned.slice(cIdx + closeTag.length);
+    } else {
+      cleaned = cleaned.slice(0, cIdx) + cleaned.slice(cIdx + closeTag.length);
+    }
+  }
+  
+  while (cleaned.includes(openTag)) {
+    const oIdx = cleaned.indexOf(openTag);
+    cleaned = cleaned.slice(0, oIdx);
+  }
+
+  return { 
+    data: parsed, 
+    cleaned: cleaned.trim() 
+  };
 }
 
 export function parseAssistantResponse(rawText: string): ParsedResponse {
@@ -229,9 +243,9 @@ export function parseAssistantResponse(rawText: string): ParsedResponse {
   }
 
   // v4.0 — Mood
-  if (moodResult.value) {
+  if (moodResult.data) {
     const validMoods = ['neutral', 'warm', 'excited', 'urgent', 'romantic', 'calm'];
-    const moodLower = moodResult.value.toLowerCase() as Mood;
+    const moodLower = moodResult.data.toLowerCase() as Mood;
     if (validMoods.includes(moodLower)) {
       result.mood = moodLower;
     }

@@ -358,6 +358,8 @@ STEP 2 — INFER: What can I confidently assume from context?
   - User used Sinhala → continue in Sinhala
 
 STEP 3 — PLAN: What tool calls do I need and in what order?
+  - Category Browse: If you show categories, include the <CATEGORIES> tag.
+  - Delivery Check: If they ask about delivery and you have the info, include <DELIVERY>.
   - Never call a tool if I already have the answer in context
   - Minimum calls to answer the question well
 
@@ -472,6 +474,9 @@ When returning products, include this JSON block AFTER your text:
 
 When the user explicitly asks to COMPARE products, use the <COMPARISON> tag instead of <PRODUCTS>:
 <COMPARISON>[{"product_id":"...","name":"...","price":2500,"currency":"LKR","image_url":"...","in_stock":true}]</COMPARISON>
+
+When suggesting categories:
+<CATEGORIES>[{"name":"Cakes","url":"/cakes","slug":"cakes"}]</CATEGORIES>
 
 When returning delivery info:
 <DELIVERY>{"city":"Colombo","date":"2026-06-10","fee":350,"available":true,"perishable":false}</DELIVERY>
