@@ -232,8 +232,15 @@ async function executeMCPToolsWithIntent(
 
         const searchResult = await mcpClient.searchProducts({ query: fallbackQuery, in_stock_only: true, limit: 5 });
         const parsed = mcpClient.parseResult<string>(searchResult);
-        results.push(`[SEARCH RESULTS for "${fallbackQuery}"]:\n${parsed}`);
-        allSearchText = parsed;
+        
+        if (parsed.includes('No products found')) {
+          const catResult = await mcpClient.listCategories();
+          const catParsed = mcpClient.parseResult<string>(catResult);
+          results.push(`[SEARCH RESULTS for "${fallbackQuery}"]:\nNo products found.\n\n[AVAILABLE CATEGORIES TO SUGGEST INSTEAD]:\n${catParsed}`);
+        } else {
+          results.push(`[SEARCH RESULTS for "${fallbackQuery}"]:\n${parsed}`);
+          allSearchText = parsed;
+        }
       }
 
       if (allSearchText) {

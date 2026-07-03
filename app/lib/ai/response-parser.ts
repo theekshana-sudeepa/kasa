@@ -52,24 +52,32 @@ function extractTag<T>(
   const openTag = `<${tagName}>`;
   const closeTag = `</${tagName}>`;
 
-  const startIdx = text.indexOf(openTag);
-  if (startIdx === -1) {
-    return { data: null, cleaned: text };
+  let cleaned = text;
+  let parsed: T | null = null;
+  let isStreaming = false;
+
+  while (cleaned.includes(openTag)) {
+    const startIdx = cleaned.indexOf(openTag);
+    const contentStart = startIdx + openTag.length;
+    const endIdx = cleaned.indexOf(closeTag, contentStart);
+
+    if (endIdx === -1) {
+      // Tag is open but not closed yet (streaming).
+      isStreaming = true;
+      cleaned = cleaned.slice(0, startIdx).trim();
+      break;
+    }
+
+    const rawContent = cleaned.slice(contentStart, endIdx).trim();
+    const tryParse = safeParse<T>(rawContent);
+    if (tryParse) {
+      parsed = tryParse; // Keep the last valid parsed data
+    }
+    cleaned = (cleaned.slice(0, startIdx) + cleaned.slice(endIdx + closeTag.length)).trim();
   }
 
-  const contentStart = startIdx + openTag.length;
-  const endIdx = text.indexOf(closeTag, contentStart);
-
-  if (endIdx === -1) {
-    // Tag is open but not closed yet (streaming).
-    const cleaned = text.slice(0, startIdx).trim();
-    return { data: null, cleaned };
-  }
-
-  const rawContent = text.slice(contentStart, endIdx).trim();
-  const parsed = safeParse<T>(rawContent);
-  const cleaned = (text.slice(0, startIdx) + text.slice(endIdx + closeTag.length)).trim();
-
+  // If we are currently streaming a tag, we return the previously parsed valid tag (if any)
+  // or null, so the UI doesn't crash.
   return { data: parsed, cleaned };
 }
 
@@ -83,23 +91,24 @@ function extractTextTag(
   const openTag = `<${tagName}>`;
   const closeTag = `</${tagName}>`;
 
-  const startIdx = text.indexOf(openTag);
-  if (startIdx === -1) {
-    return { value: null, cleaned: text };
+  let cleaned = text;
+  let lastValue: string | null = null;
+
+  while (cleaned.includes(openTag)) {
+    const startIdx = cleaned.indexOf(openTag);
+    const contentStart = startIdx + openTag.length;
+    const endIdx = cleaned.indexOf(closeTag, contentStart);
+
+    if (endIdx === -1) {
+      cleaned = cleaned.slice(0, startIdx).trim();
+      break;
+    }
+
+    lastValue = cleaned.slice(contentStart, endIdx).trim();
+    cleaned = (cleaned.slice(0, startIdx) + cleaned.slice(endIdx + closeTag.length)).trim();
   }
 
-  const contentStart = startIdx + openTag.length;
-  const endIdx = text.indexOf(closeTag, contentStart);
-
-  if (endIdx === -1) {
-    const cleaned = text.slice(0, startIdx).trim();
-    return { value: null, cleaned };
-  }
-
-  const value = text.slice(contentStart, endIdx).trim();
-  const cleaned = (text.slice(0, startIdx) + text.slice(endIdx + closeTag.length)).trim();
-
-  return { value, cleaned };
+  return { value: lastValue, cleaned };
 }
 
 export function parseAssistantResponse(rawText: string): ParsedResponse {
