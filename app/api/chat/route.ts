@@ -65,7 +65,20 @@ function getModel() {
   return null;
 }
 
-// ── MCP Product Parser ──────────────────────────────────────────
+// ── MCP Product & Category Parsers ──────────────────────────────
+function parseCategoriesFromMarkdown(markdown: string): {name: string, url: string, slug: string}[] {
+  const categories: {name: string, url: string, slug: string}[] = [];
+  const regex = /-\s+\[([^\]]+)\]\(([^)]+)\)/g;
+  let match;
+  while ((match = regex.exec(markdown)) !== null) {
+    const name = match[1];
+    const url = match[2];
+    const slug = url.split('/').pop() || name.toLowerCase().replace(/\s+/g, '-');
+    categories.push({ name, url, slug });
+  }
+  return categories;
+}
+
 async function parseProductsFromMarkdown(markdown: string): Promise<string> {
   const mcpClient = getMCPClient();
   const products: Array<{
@@ -197,6 +210,7 @@ async function executeMCPToolsWithIntent(
   const lower = message.toLowerCase();
   const results: string[] = [];
   let preFormattedProducts = '';
+  let preFormattedCategories = '';
 
   try {
     if (intent.is_shopping && intent.search_queries.length > 0) {
@@ -236,6 +250,12 @@ async function executeMCPToolsWithIntent(
         if (parsed.includes('No products found')) {
           const catResult = await mcpClient.listCategories();
           const catParsed = mcpClient.parseResult<string>(catResult);
+          
+          const cats = parseCategoriesFromMarkdown(catParsed);
+          if (cats.length > 0) {
+            preFormattedCategories = `<CATEGORIES>${JSON.stringify(cats)}</CATEGORIES>`;
+          }
+          
           results.push(`[SEARCH RESULTS for "${fallbackQuery}"]:\nNo products found.\n\n[AVAILABLE CATEGORIES TO SUGGEST INSTEAD]:\n${catParsed}`);
         } else {
           results.push(`[SEARCH RESULTS for "${fallbackQuery}"]:\n${parsed}`);
@@ -249,6 +269,12 @@ async function executeMCPToolsWithIntent(
     } else if (intent.intent_category === 'BROWSE' || lower.includes('categor') || lower.includes('browse') || lower.includes('what do you have')) {
       const catResult = await mcpClient.listCategories();
       const parsed = mcpClient.parseResult<string>(catResult);
+      
+      const cats = parseCategoriesFromMarkdown(parsed);
+      if (cats.length > 0) {
+        preFormattedCategories = `<CATEGORIES>${JSON.stringify(cats)}</CATEGORIES>`;
+      }
+      
       results.push(`[CATEGORIES]:\n${parsed}`);
     }
 
@@ -265,6 +291,9 @@ async function executeMCPToolsWithIntent(
   let combined = results.join('\n\n');
   if (preFormattedProducts) {
     combined += `\n\n[PRE-FORMATTED PRODUCTS WITH REAL IMAGES — USE THIS EXACT JSON IN YOUR <PRODUCTS> TAG, DO NOT MODIFY OR INVENT IMAGE URLS]:\n${preFormattedProducts}`;
+  }
+  if (preFormattedCategories) {
+    combined += `\n\n[PRE-FORMATTED CATEGORIES]:\n${preFormattedCategories}`;
   }
   return combined;
 }
@@ -728,12 +757,24 @@ export async function POST(request: Request) {
           mcpDataForAI = mcpData.slice(0, pfIdx).trim();
         }
 
+        let preFormattedCatTag = '';
+        const pfCatMarker = '[PRE-FORMATTED CATEGORIES]';
+        const pfCatIdx = mcpDataForAI.indexOf(pfCatMarker);
+        if (pfCatIdx !== -1) {
+          const catTagMatch = mcpDataForAI.slice(pfCatIdx).match(/<CATEGORIES>[\s\S]*?<\/CATEGORIES>/);
+          if (catTagMatch) preFormattedCatTag = catTagMatch[0];
+          mcpDataForAI = mcpDataForAI.slice(0, pfCatIdx).trim();
+        }
+
         let history = getConversation(sessionId);
         const noProductsTagInstruction = preFormattedTag
           ? `\n\n[IMPORTANT: Do NOT output a <PRODUCTS> tag. Real product data with images will be appended automatically after your response. Just write your conversational text.]`
           : '';
+        const noCategoriesTagInstruction = preFormattedCatTag
+          ? `\n\n[IMPORTANT: Do NOT output a <CATEGORIES> tag. Real category data will be appended automatically after your response. Just write your conversational text.]`
+          : '';
         const userContent = mcpDataForAI
-          ? `${message}\n\n--- TOOL RESULTS ---\n${mcpDataForAI}${noProductsTagInstruction}`
+          ? `${message}\n\n--- TOOL RESULTS ---\n${mcpDataForAI}${noProductsTagInstruction}${noCategoriesTagInstruction}`
           : message;
 
         history.push({ role: 'user' as const, content: userContent });
@@ -747,14 +788,17 @@ export async function POST(request: Request) {
           temperature: 0.7,
           onFinish: async (event) => {
             if (event.text) {
-              history.push({ role: 'assistant' as const, content: event.text + (preFormattedTag ? '\n' + preFormattedTag : '') });
+              let finalText = event.text;
+              if (preFormattedTag) finalText += '\n' + preFormattedTag;
+              if (preFormattedCatTag) finalText += '\n' + preFormattedCatTag;
+              history.push({ role: 'assistant' as const, content: finalText });
               setConversation(sessionId, history);
             }
           },
         });
 
         // Inject pre-formatted products at end of stream
-        if (preFormattedTag) {
+        if (preFormattedTag || preFormattedCatTag) {
           const encoder = new TextEncoder();
           const injectTag = preFormattedTag;
           
@@ -766,7 +810,8 @@ export async function POST(request: Request) {
             flush(controller) {
               if (!streamDone) {
                 streamDone = true;
-                controller.enqueue(encoder.encode(`\n${injectTag}`));
+                if (injectTag) controller.enqueue(encoder.encode(`\n${injectTag}`));
+                if (preFormattedCatTag) controller.enqueue(encoder.encode(`\n${preFormattedCatTag}`));
               }
             },
           });
