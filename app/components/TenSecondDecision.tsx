@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useChatStore } from '../lib/store/chat-store';
 import type { Product } from '../lib/mcp/types';
 
@@ -13,12 +13,20 @@ export default function TenSecondDecision({ product, onDecisionMade }: TenSecond
   const [status, setStatus] = useState<'counting' | 'accepted' | 'stopped'>('counting');
   const addToCart = useChatStore((state) => state.addToCart);
 
+  const handleAccept = useCallback(() => {
+    setStatus('accepted');
+    addToCart({ ...product, quantity: 1 });
+    if (onDecisionMade) onDecisionMade(true);
+  }, [addToCart, onDecisionMade, product]);
+
   useEffect(() => {
     if (status !== 'counting') return;
 
     if (timeLeft <= 0) {
-      handleAccept();
-      return;
+      const acceptTimer = setTimeout(() => {
+        handleAccept();
+      }, 0);
+      return () => clearTimeout(acceptTimer);
     }
 
     const timer = setInterval(() => {
@@ -26,13 +34,7 @@ export default function TenSecondDecision({ product, onDecisionMade }: TenSecond
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, status]);
-
-  const handleAccept = () => {
-    setStatus('accepted');
-    addToCart({ ...product, quantity: 1 });
-    if (onDecisionMade) onDecisionMade(true);
-  };
+  }, [timeLeft, status, handleAccept]);
 
   const handleStop = () => {
     setStatus('stopped');
@@ -71,7 +73,7 @@ export default function TenSecondDecision({ product, onDecisionMade }: TenSecond
       </div>
 
       <div className="tsd-actions">
-        <button className="tsd-btn-stop" onClick={handleStop}>⛔ Stop! I'll decide</button>
+        <button className="tsd-btn-stop" onClick={handleStop}>⛔ Stop! I&apos;ll decide</button>
         <button className="tsd-btn-accept" onClick={handleAccept}>✅ Let KASA pick!</button>
       </div>
     </div>

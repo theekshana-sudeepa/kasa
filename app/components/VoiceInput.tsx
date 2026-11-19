@@ -1,8 +1,10 @@
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useSyncExternalStore } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic } from 'lucide-react';
+
+const emptySubscribe = () => () => {};
 
 interface VoiceInputProps {
   onTranscript: (text: string) => void;
@@ -10,7 +12,6 @@ interface VoiceInputProps {
   disabled?: boolean;
 }
 
-/* global SpeechRecognition, webkitSpeechRecognition */
 interface SpeechRecognitionEvent {
   results: { [key: number]: { [key: number]: { transcript: string } } };
 }
@@ -89,8 +90,7 @@ export default function VoiceInput({ onTranscript, language = 'en-US', disabled 
   }, [isListening, ensureRecognition]);
 
   // Defer browser API check to avoid hydration mismatch
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
 
   if (!mounted) return null;
   if (!getSpeechRecognitionAPI()) return null;

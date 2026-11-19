@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useSyncExternalStore } from 'react';
 import type { Product } from '../lib/mcp/types';
 import { useChatStore } from '../lib/store/chat-store';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ShoppingCart, Check, Package, Share2, ZoomIn, ZoomOut } from 'lucide-react';
+import { X, ShoppingCart, Check, Package, Share2 } from 'lucide-react';
 import KasaPickBadge from './KasaPickBadge';
 import { useToast } from './Toast';
 
@@ -13,8 +13,10 @@ interface ProductModalProps {
   onClose: () => void;
 }
 
+const emptySubscribe = () => () => {};
+
 export default function ProductModal({ product, onClose }: ProductModalProps) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
   const [added, setAdded] = useState(false);
   const [imgError, setImgError] = useState(false);
   const [zoomed, setZoomed] = useState(false);
@@ -23,7 +25,6 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setMounted(true);
     document.body.style.overflow = 'hidden';
 
     // Focus trap — Escape to close

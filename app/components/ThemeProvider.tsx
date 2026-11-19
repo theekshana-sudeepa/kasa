@@ -16,19 +16,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    // Read theme preference
-    const savedTheme = localStorage.getItem('kasa-theme') as Theme;
-    if (savedTheme) {
-      setTheme(savedTheme);
-      document.documentElement.classList.toggle('dark', savedTheme === 'dark');
-    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      setTheme('dark');
-      document.documentElement.classList.add('dark');
-    }
-    // Small delay to allow theme to paint before revealing
-    requestAnimationFrame(() => {
+    const savedTheme = localStorage.getItem('kasa-theme') as Theme | null;
+    const resolvedTheme: Theme =
+      savedTheme || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+
+    document.documentElement.classList.toggle('dark', resolvedTheme === 'dark');
+
+    const frameId = requestAnimationFrame(() => {
+      setTheme(resolvedTheme);
       setMounted(true);
     });
+
+    return () => cancelAnimationFrame(frameId);
   }, []);
 
   const toggleTheme = useCallback(() => {

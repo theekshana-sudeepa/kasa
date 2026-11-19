@@ -148,29 +148,34 @@ export default function Home() {
       return;
     }
 
+    let effectiveText = text.trim();
+    let resolvedUserName = userName;
+
     // ── If name capture is pending: user typed a name instead of using the card ──
     if (nameCapturePending) {
-      const detectedName = extractNameFromMessage(text.trim());
+      const detectedName = extractNameFromMessage(effectiveText);
       if (detectedName) {
+        resolvedUserName = detectedName;
         setUserName(detectedName);
         setNameCapturePending(false);
         // Remove name-capture message from UI
         useChatStore.setState((s) => ({
           messages: s.messages.filter((m) => !m.content.startsWith('__NAME_CAPTURE__')),
         }));
-        // Fire the original query
+        // Continue with the held original query if present
         if (pendingQuery) {
+          effectiveText = pendingQuery;
           setPendingQuery(null);
-          await sendMessage(pendingQuery);
+        } else {
+          return;
         }
-        return;
       }
     }
 
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
-      content: text.trim(),
+      content: effectiveText,
       timestamp: Date.now(),
     };
     addMessage(userMsg);
@@ -183,9 +188,12 @@ export default function Home() {
 
     // ── Passive name detection in ongoing chat ──
     // Catch: "by the way I'm Alex", "call me Sam"
-    if (!userName) {
-      const detectedName = extractNameFromMessage(text.trim());
-      if (detectedName) setUserName(detectedName);
+    if (!resolvedUserName) {
+      const detectedName = extractNameFromMessage(effectiveText);
+      if (detectedName) {
+        resolvedUserName = detectedName;
+        setUserName(detectedName);
+      }
     }
 
     const assistantMsgId = `assistant-${Date.now()}`;
@@ -195,14 +203,14 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: text.trim(),
+          message: effectiveText,
           sessionId,
           language,
           cart,
           giftMode,
           deliveryCity,
           deliveryDate,
-          userName: userName || undefined,
+          userName: resolvedUserName || undefined,
         }),
       });
 

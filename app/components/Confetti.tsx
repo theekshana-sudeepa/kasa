@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useState } from 'react';
 
 const COLORS = ['#402970', '#6747b3', '#f8da08', '#10b981', '#ef4444', '#3b82f6', '#f59e0b', '#e91e63'];
 
@@ -16,8 +16,7 @@ function generatePieces() {
 }
 
 export default function Confetti() {
-  const piecesRef = useRef(generatePieces());
-  const pieces = piecesRef.current;
+  const [pieces] = useState(generatePieces);
 
   return (
     <div className="confetti-container">

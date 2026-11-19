@@ -78,11 +78,17 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // Using a microtask to avoid the synchronous setState-in-effect lint error
-    queueMicrotask(() => setMounted(true));
-    fetchData();
-    const interval = setInterval(fetchData, 10000); // Refresh every 10s
-    return () => clearInterval(interval);
+    const initTimer = setTimeout(() => {
+      setMounted(true);
+      void fetchData();
+    }, 0);
+    const interval = setInterval(() => {
+      void fetchData();
+    }, 10000); // Refresh every 10s
+    return () => {
+      clearTimeout(initTimer);
+      clearInterval(interval);
+    };
   }, [fetchData]);
 
   if (!mounted) return null;

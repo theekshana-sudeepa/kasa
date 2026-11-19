@@ -124,7 +124,7 @@ Now analyze the following message. Output ONLY the JSON object, nothing else.`;
  * Falls back to heuristic extraction if AI fails.
  */
 export async function extractIntent(
-  model: any,
+  model: Parameters<typeof generateText>[0]['model'],
   message: string,
   conversationContext?: string
 ): Promise<ExtractedIntent> {
