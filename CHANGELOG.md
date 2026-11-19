@@ -76,4 +76,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-*Maintained by [ThikkaBro](https://github.com/ThikkaBro)*
+*Maintained by [Theekshana Sudeepa](https://github.com/theekshana-sudeepa)*

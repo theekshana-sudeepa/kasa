@@ -14,7 +14,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 ### Reporting Bugs
 
-1. Check [existing issues](https://github.com/ThikkaBro/kasa/issues) to avoid duplicates
+1. Check [existing issues](https://github.com/theekshana-sudeepa/kasa/issues) to avoid duplicates
 2. Create a new issue with:
    - Clear title describing the bug
    - Steps to reproduce
@@ -24,7 +24,7 @@ By participating in this project, you agree to maintain a respectful and inclusi
 
 ### Suggesting Features
 
-1. Open a [Feature Request](https://github.com/ThikkaBro/kasa/issues/new) issue
+1. Open a [Feature Request](https://github.com/theekshana-sudeepa/kasa/issues/new) issue
 2. Describe the feature and its use case
 3. Explain why it would benefit KASA users
 
@@ -138,8 +138,8 @@ Follow [Conventional Commits](https://www.conventionalcommits.org/):
 
 ## Questions?
 
-Open a [Discussion](https://github.com/ThikkaBro/kasa/discussions) or reach out to the maintainers.
+Open a [Discussion](https://github.com/theekshana-sudeepa/kasa/discussions) or reach out to the maintainers.
 
 ---
 
-*Thank you for helping make KASA better! — [ThikkaBro](https://github.com/ThikkaBro)*
+*Thank you for helping make KASA better! — [Theekshana Sudeepa](https://github.com/theekshana-sudeepa)*

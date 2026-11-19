@@ -92,7 +92,7 @@ Vercel is the recommended deployment platform for Next.js applications.
 
 ### One-Click Deploy
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ThikkaBro/kasa)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/theekshana-sudeepa/kasa)
 
 ### Manual Deploy
 
@@ -304,7 +304,7 @@ sudo npm install -g pm2
 ```bash
 # Clone and build
 cd /var/www
-git clone https://github.com/ThikkaBro/kasa.git
+git clone https://github.com/theekshana-sudeepa/kasa.git
 cd kasa
 npm install
 cp .env.example .env.local
@@ -428,4 +428,4 @@ After deployment, verify these endpoints:
 
 ---
 
-*Deployment guide maintained by [ThikkaBro](https://github.com/ThikkaBro)*
+*Deployment guide maintained by [Theekshana Sudeepa](https://github.com/theekshana-sudeepa)*

@@ -60,4 +60,4 @@ KASA includes several security measures:
 
 ---
 
-*Security policy maintained by [ThikkaBro](https://github.com/ThikkaBro)*
+*Security policy maintained by [Theekshana Sudeepa](https://github.com/theekshana-sudeepa)*

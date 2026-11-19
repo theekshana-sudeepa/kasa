@@ -1,436 +1,281 @@
 <div align="center">
 
-# 🛍️ KASA — AI Shopping Concierge for Kapruka
+# KASA — AI Shopping Concierge for Kapruka
 
-**කැස** · Your Personal AI Shopping Assistant for Sri Lanka's Largest E-Commerce Platform
+**කැස** · Emotionally intelligent, trilingual AI shopping concierge built on the Kapruka Model Context Protocol (MCP) for Sri Lanka's largest e-commerce platform.
 
-[![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-1.0.0-purple?style=flat-square)]()
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Vercel AI SDK](https://img.shields.io/badge/Vercel%20AI%20SDK-6-000000?style=flat-square&logo=vercel)](https://sdk.vercel.ai/)
+[![Kapruka MCP](https://img.shields.io/badge/Protocol-Kapruka%20MCP-6D28D9?style=flat-square)](https://mcp.kapruka.com)
+[![Kapruka Agent Challenge](https://img.shields.io/badge/Kapruka%20Agent%20Challenge%202026-Builder-F59E0B?style=flat-square)](#-recognition)
+[![License: MIT](https://img.shields.io/badge/License-MIT-10B981?style=flat-square)](LICENSE)
 
-[Live Demo](#deployment) · [Installation](#installation) · [Features](#-features) · [Documentation](#-documentation)
+[Architecture](#-system-architecture) · [Engineering Highlights](#-core-engineering-highlights) · [Getting Started](#-getting-started) · [API Reference](#-api-reference) · [Deployment](#-deployment)
 
 </div>
 
 ---
 
-## 📖 About
+## Overview
 
-**KASA** (කැස — Sinhala for *coin*) is an AI-powered shopping concierge for [Kapruka.com](https://www.kapruka.com), Sri Lanka's largest e-commerce platform. Built as a conversational shopping experience, KASA understands natural language in **English**, **Sinhala**, and **Tanglish** (Tamil-English mix), detects emotional context, and guides users from product discovery through checkout — all through a premium chat interface.
+**KASA** (කැස) transforms e-commerce search and checkout on [Kapruka.com](https://www.kapruka.com) into a natural, empathetic conversation. Supporting **English**, **Sinhala (සිංහල)**, and **Tanglish**, KASA detects user mood and urgency, orchestrates live product search, delivery availability, cart management, guest checkout, and order tracking over the **Kapruka MCP** server, and degrades gracefully to a zero-API-key deterministic engine when LLM credentials are absent.
 
-Unlike traditional chatbots, KASA reads the emotional context of your message. Whether you're panicking about a forgotten birthday, feeling romantic, or just need a phone charger — KASA responds with appropriate empathy, urgency, or practicality.
-
----
-
-## ✨ Features
-
-### 🧠 Emotional Intelligence
-- **Mood detection** — Understands sad, urgent, excited, anxious, romantic, and neutral emotions
-- **Empathy-first responses** — Leads with warmth before product suggestions
-- **Adaptive tone** — Switches between playful, practical, and supportive based on context
-
-### 🌐 Trilingual Support
-- **English** — Full conversational support
-- **Sinhala (සිංහල)** — Complete UI translation + AI responses in native script
-- **Tanglish** — Tamil-English mix for natural South Asian communication
-
-### 🛒 Full E-Commerce Flow
-- **Product search & discovery** via Kapruka MCP integration
-- **Smart product ranking** with KASA's Pick recommendations
-- **Multi-item shopping cart** with real-time total calculation
-- **Delivery checking** with city search and date validation
-- **Secure checkout** with recipient/sender details
-- **Order tracking** by order number
-- **Category browsing** with rich UI cards
-
-### 🎁 Gift Intelligence
-- **Gift mode** — Tailored suggestions for occasions (birthday, wedding, anniversary, etc.)
-- **Gift target awareness** — Knows if it's for amma, girlfriend, colleague, etc.
-- **Gift message cards** — Personalized messages with the order
-- **Group gift links** — Share and split costs with friends
-
-### 🔮 Predictive Features
-- **Ghost Cart** — Pre-fetches likely additions for instant responses
-- **Smart Suggestions** — Context-aware next-best-action recommendations
-- **Conversation Memory** — Remembers delivery city, budget, preferences across messages
-
-### 🎨 Premium UI/UX
-- **Glassmorphic design** with smooth animations (Framer Motion)
-- **Dark/Light mode** with system preference detection
-- **Mood-reactive backgrounds** that shift with conversation tone
-- **Voice input** with Web Speech API
-- **Responsive design** — Desktop, tablet, and mobile optimized
-- **Real-time telemetry dashboard** at `/dashboard`
+> **Recognition — Kapruka Agent Challenge 2026**
+> Built and submitted as a live AI shopping agent on the Kapruka MCP for the **Kapruka Agent Challenge 2026** (700+ participating developers across Sri Lanka). Awarded the official **Builder Certificate of Participation** by Kapruka Holdings PLC (`REF · NHKZ4`, July 2026).
 
 ---
 
-## 📸 Screenshots
+## System Architecture
 
-> Add screenshots of the application here.
+```mermaid
+flowchart TB
+    subgraph Client["Client Layer — Next.js App Router and React 19"]
+        ChatUI["Chat Workspace<br/>app/page.tsx"]
+        CartUI["Cart Drawer and Checkout<br/>CartDrawer / CheckoutForm"]
+        DashUI["Telemetry Dashboard<br/>app/dashboard/page.tsx"]
+        Store["Zustand State Store<br/>messages, cart, mood, i18n"]
+        ChatUI -->|Sync State| Store
+        CartUI -->|Mutate Cart| Store
+    end
 
-| Light Mode | Dark Mode |
-|:---:|:---:|
-| *Chat Interface — Light* | *Chat Interface — Dark* |
+    subgraph Server["API and Security Layer — Next.js Route Handlers"]
+        RateLimit["Sliding-Window Rate Limiter<br/>and Input Sanitizer"]
+        ChatAPI["POST /api/chat<br/>Streaming Orchestrator"]
+        RestAPIs["REST Endpoints<br/>cart, delivery, order, suggestions, dashboard"]
+        RateLimit -->|Validate Request| ChatAPI
+        RateLimit -->|Validate Request| RestAPIs
+    end
 
-| Mobile View | Dashboard |
-|:---:|:---:|
-| *Responsive Mobile* | *Telemetry Dashboard* |
+    subgraph Engine["Conversational AI Pipeline — app/lib/ai"]
+        Intent["Intent and Emotion Extractor<br/>Mood, Urgency, Occasion"]
+        Memory["Session Store and Memory Engine<br/>1h TTL In-Memory State"]
+        Ranker["Product Ranker and Ghost Cart<br/>KASA Pick and Predictions"]
+        LLM["Multi-Provider LLM Router<br/>Groq / Gemini / OpenAI / Zero-Key Fallback"]
+        Parser["Structured Tag Streamer<br/>and Tone Enforcement"]
+        Intent -->|Update Context| Memory
+        Memory -->|Build Prompt| LLM
+        Ranker -->|Enrich Results| Parser
+        LLM -->|Stream Tokens| Parser
+    end
+
+    subgraph External["External Commerce Protocol"]
+        MCPClient["Kapruka MCP Client<br/>JSON-RPC 2.0, SSE, Exponential Backoff"]
+        KaprukaMCP["Kapruka MCP Server<br/>mcp.kapruka.com"]
+        MCPClient -->|JSON RPC Over HTTPS| KaprukaMCP
+    end
+
+    Store -->|Streaming HTTP POST| RateLimit
+    DashUI -->|Poll Metrics| RestAPIs
+    ChatAPI -->|Extract Intent| Intent
+    ChatAPI -->|Invoke Commerce Tools| MCPClient
+    RestAPIs -->|Direct Tool Calls| MCPClient
+    MCPClient -->|Products and Orders| Ranker
+    Parser -->|Text and UI Tags Stream| ChatUI
+```
+
+### Conversational Request Flow
+
+```mermaid
+sequenceDiagram
+    participant User as Shopper
+    participant UI as Chat UI
+    participant API as POST /api/chat
+    participant AI as Intent and LLM Pipeline
+    participant MCP as Kapruka MCP Client
+
+    User->>UI: Send message in English, Sinhala, or Tanglish
+    UI->>API: POST message, sessionId, language, cart, deliveryCity
+    API->>API: Check rate limit and sanitize input
+    API->>AI: Extract emotion, shopping intent, and memory updates
+    AI-->>API: Structured intent with search queries and mood
+    API->>MCP: Call Kapruka MCP tools for search, delivery, or tracking
+    MCP-->>API: Product catalog, delivery status, or order payload
+    API->>AI: Rank products, update Ghost Cart, and stream LLM reply
+    AI-->>API: Token stream with structured UI tags
+    API-->>UI: Stream prose plus PRODUCTS, DELIVERY, and QUICK_REPLIES tags
+    UI-->>User: Render empathetic reply, product cards, and mood background
+```
 
 ---
 
-## 🏗️ Technology Stack
+## Core Engineering Highlights
+
+- **Multi-Provider LLM Routing with Zero-Key Fallback:** Dynamically resolves providers in priority order (**Groq Llama 3.3 70B** -> **Google Gemini 2.0 Flash** -> **OpenAI GPT-4o-mini**) via the Vercel AI SDK, and falls back seamlessly to a deterministic commerce engine when no API key is configured.
+- **Resilient Kapruka MCP Client:** Implements JSON-RPC 2.0 session initialization (`Mcp-Session-Id`), Server-Sent Events (SSE) stream parsing, `429 Retry-After` handling, exponential backoff retries, response verification, and real-time telemetry tracking.
+- **Emotion-Aware Commerce Pipeline:** Detects emotional context (`sad`, `urgent`, `excited`, `anxious`, `romantic`, `neutral`), adjusts visual mood backgrounds, enforces natural non-robotic tone, and prioritizes empathy before recommendations.
+- **Trilingual Localization:** Native UI strings and conversational responses across **English**, **Sinhala (සිංහල)**, and **Tanglish**, paired with Web Speech API voice input.
+- **Predictive Shopping UX:** Includes **KASA's Pick** product scoring, **Ghost Cart** pre-fetching for likely additions, **10-Second Decision** quick-pick mode, gift message cards, group-gift split links, and live conversation memory.
+- **Production Hardening:** Enforces strict CSP and security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Permissions-Policy`), sliding-window IP rate limiting, XSS input sanitization, 1-hour TTL ephemeral server sessions, and standalone multi-stage Docker packaging.
+
+---
+
+## Technology Stack
 
 | Layer | Technology |
-|-------|-----------|
-| **Framework** | [Next.js 16](https://nextjs.org/) (App Router) |
-| **Language** | [TypeScript 5](https://www.typescriptlang.org/) |
-| **UI** | [React 19](https://react.dev/) |
-| **Styling** | Vanilla CSS (Custom Design System) |
-| **Animation** | [Framer Motion](https://www.framer.com/motion/) |
-| **Icons** | [Lucide React](https://lucide.dev/) |
-| **State** | [Zustand](https://zustand.docs.pmnd.rs/) |
-| **AI SDK** | [Vercel AI SDK](https://sdk.vercel.ai/) |
-| **AI Providers** | Groq (Llama 3.3), Google Gemini, OpenAI |
-| **E-Commerce** | [Kapruka MCP Server](https://mcp.kapruka.com) |
-| **Validation** | [Zod](https://zod.dev/) |
+|-------|------------|
+| **Framework** | [Next.js 16](https://nextjs.org/) (App Router, Turbopack, Standalone Output) |
+| **Language** | [TypeScript 5](https://www.typescriptlang.org/) (Strict Mode) |
+| **UI & Motion** | [React 19](https://react.dev/), [Framer Motion 12](https://www.framer.com/motion/), [Lucide React](https://lucide.dev/) |
+| **State Management** | [Zustand 5](https://zustand.docs.pmnd.rs/) |
+| **AI Orchestration** | [Vercel AI SDK 6](https://sdk.vercel.ai/) (`@ai-sdk/groq`, `@ai-sdk/google`, `@ai-sdk/openai`) |
+| **Commerce Protocol** | [Kapruka MCP Server](https://mcp.kapruka.com) (JSON-RPC 2.0 + SSE) |
+| **Validation** | [Zod 4](https://zod.dev/) |
+| **Containerization** | Multi-stage Alpine `Dockerfile` & `docker-compose.yml` |
 
 ---
 
-## 🏛️ Architecture Overview
+## Repository Structure
 
-```
-┌─────────────────────────────────────────────────────┐
-│                    Client (React)                    │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐            │
-│  │  Chat UI │ │  Cart    │ │Dashboard │            │
-│  │  (page)  │ │  Drawer  │ │  (page)  │            │
-│  └────┬─────┘ └────┬─────┘ └────┬─────┘            │
-│       │             │            │                   │
-│  ┌────▼─────────────▼────────────▼─────┐            │
-│  │         Zustand Store               │            │
-│  │  (messages, cart, language, mood)    │            │
-│  └────────────────┬────────────────────┘            │
-└───────────────────┼─────────────────────────────────┘
-                    │ HTTP/Streaming
-┌───────────────────▼─────────────────────────────────┐
-│                 API Routes (Server)                  │
-│  ┌──────────┐ ┌──────────┐ ┌──────────┐            │
-│  │/api/chat │ │/api/cart │ │/api/dash │            │
-│  └────┬─────┘ └──────────┘ └──────────┘            │
-│       │                                              │
-│  ┌────▼────────────────────────────────┐            │
-│  │        AI Pipeline                  │            │
-│  │  Intent → MCP Tools → AI Model     │            │
-│  │  → Response Parser → Tone Enforce  │            │
-│  └────┬────────────────────────────────┘            │
-│       │                                              │
-│  ┌────▼────────────────────────────────┐            │
-│  │      Kapruka MCP Server             │            │
-│  │  (Search, Cart, Delivery, Orders)   │            │
-│  └─────────────────────────────────────┘            │
-└─────────────────────────────────────────────────────┘
-```
-
----
-
-## 📦 Installation
-
-### Prerequisites
-
-- **Node.js** ≥ 18.18.0
-- **npm** ≥ 9.0.0 (or yarn/pnpm)
-
-### Quick Start
-
-```bash
-# Clone the repository
-git clone https://github.com/ThikkaBro/kasa.git
-cd kasa
-
-# Install dependencies
-npm install
-
-# Set up environment variables
-cp .env.example .env.local
-# Edit .env.local with your API key (see Environment Variables below)
-
-# Start development server
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-> **Note**: KASA works **without any API key** using its smart fallback engine. Add a key for full AI-powered conversations.
-
----
-
-## 🔧 Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `GROQ_API_KEY` | No* | [Groq](https://console.groq.com) API key (FREE — recommended) |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | No* | [Google AI Studio](https://aistudio.google.com/apikey) API key (FREE tier) |
-| `OPENAI_API_KEY` | No* | [OpenAI](https://platform.openai.com/api-keys) API key (Paid) |
-| `MCP_ENDPOINT` | No | Kapruka MCP endpoint (defaults to `https://mcp.kapruka.com/mcp`) |
-
-> *At least one AI provider key is recommended for the full experience. KASA will use the first available key in order: Groq → Google → OpenAI.
-
----
-
-## 🚀 Running the Application
-
-### Development
-
-```bash
-npm run dev
-```
-
-### Production Build
-
-```bash
-npm run build
-npm start
-```
-
-### Lint
-
-```bash
-npm run lint
-```
-
----
-
-## 📂 Folder Structure
-
-```
+```text
 kasa/
 ├── app/
-│   ├── api/                    # API Routes
-│   │   ├── chat/               # Main AI chat endpoint (streaming)
-│   │   │   ├── route.ts
-│   │   │   └── parsed/route.ts # Parsed response endpoint
-│   │   ├── cart/sync/route.ts  # Cart synchronization
-│   │   ├── dashboard/route.ts  # Telemetry dashboard API
-│   │   ├── delivery/check/     # Delivery availability check
-│   │   ├── order/create/       # Order creation
-│   │   └── suggestions/        # Smart suggestions API
-│   ├── components/             # React Components
-│   │   ├── CartBadge.tsx       # Floating cart indicator
-│   │   ├── CartDrawer.tsx      # Cart sidebar drawer
-│   │   ├── CartSummary.tsx     # Cart total summary
-│   │   ├── CategoryGrid.tsx    # Category browsing grid
-│   │   ├── CheckoutForm.tsx    # Checkout details form
-│   │   ├── ComparisonTable.tsx # Product comparison view
-│   │   ├── Confetti.tsx        # Celebration animation
-│   │   ├── DeliveryCard.tsx    # Delivery info card
-│   │   ├── EmptyState.tsx      # Empty state placeholder
-│   │   ├── GiftMessageCard.tsx # Gift message component
-│   │   ├── GroupGiftLink.tsx   # Group gift sharing
-│   │   ├── Header.tsx          # App header/nav
-│   │   ├── KasaAvatar.tsx      # AI avatar icon
-│   │   ├── KasaPickBadge.tsx   # "KASA's Pick" badge
-│   │   ├── MoodBackground.tsx  # Mood-reactive background
-│   │   ├── OrderCard.tsx       # Order confirmation card
-│   │   ├── ProductCard.tsx     # Product display card
-│   │   ├── ProductCarousel.tsx # Product carousel wrapper
-│   │   ├── ProductModal.tsx    # Product detail modal
-│   │   ├── QuickReplies.tsx    # Quick reply buttons
-│   │   ├── SkeletonUI.tsx      # Loading skeletons
-│   │   ├── SmartSuggestions.tsx # Context-aware suggestions
-│   │   ├── TenSecondDecision.tsx# Quick decision prompt
-│   │   ├── ThemeProvider.tsx   # Dark/light theme
-│   │   ├── Toast.tsx           # Toast notifications
-│   │   ├── TrackingCard.tsx    # Order tracking card
-│   │   ├── TypingIndicator.tsx # AI typing animation
-│   │   ├── VoiceInput.tsx      # Voice input button
-│   │   └── WelcomeScreen.tsx   # Welcome/onboarding
-│   ├── dashboard/              # Telemetry Dashboard
-│   │   ├── page.tsx
+│   ├── api/
+│   │   ├── cart/sync/route.ts         # Cart synchronization and totals
+│   │   ├── chat/
+│   │   │   ├── route.ts               # Streaming AI + MCP orchestrator
+│   │   │   └── parsed/route.ts        # Parsed chat response helper
+│   │   ├── dashboard/route.ts         # Live session & MCP telemetry API
+│   │   ├── delivery/check/route.ts    # City/date delivery validation
+│   │   ├── order/create/route.ts      # Guest checkout order creation
+│   │   └── suggestions/route.ts       # Context-aware suggestions API
+│   ├── components/                    # 32 modular React UI components
+│   │   ├── CartDrawer.tsx             # Slide-over shopping cart
+│   │   ├── CategoryGrid.tsx           # Interactive Kapruka categories
+│   │   ├── CheckoutForm.tsx           # Recipient & sender checkout flow
+│   │   ├── ComparisonTable.tsx        # Side-by-side product comparison
+│   │   ├── ErrorBoundary.tsx          # Graceful runtime error boundary
+│   │   ├── MoodBackground.tsx         # Emotion-reactive ambient canvas
+│   │   ├── NameCaptureCard.tsx        # First-turn personalization prompt
+│   │   ├── ProductCard.tsx            # Ranked product cards & KASA's Pick
+│   │   ├── TenSecondDecision.tsx      # Countdown impulse-pick widget
+│   │   ├── VoiceInput.tsx             # Web Speech API microphone control
+│   │   └── WelcomeScreen.tsx          # Localized onboarding workspace
+│   ├── dashboard/
+│   │   ├── page.tsx                   # Real-time telemetry dashboard UI
 │   │   └── dashboard.css
-│   ├── lib/                    # Core Libraries
-│   │   ├── ai/                 # AI Engine
-│   │   │   ├── ghost-cart.ts       # Predictive cart
-│   │   │   ├── intent-extractor.ts # Intent & emotion detection
-│   │   │   ├── memory-engine.ts    # Conversation memory
-│   │   │   ├── product-ranker.ts   # Product scoring/ranking
-│   │   │   ├── response-parser.ts  # Response tag parser
-│   │   │   ├── session-store.ts    # Server-side session state
-│   │   │   ├── suggestion-engine.ts# Smart suggestions
-│   │   │   ├── system-prompt.ts    # AI system prompt builder
-│   │   │   ├── tone-enforcement.ts # Anti-robotic tone filter
-│   │   │   └── tools.ts           # MCP tool definitions
-│   │   ├── i18n/
-│   │   │   └── translations.ts    # Sinhala/Tanglish/English
-│   │   ├── mcp/
-│   │   │   ├── client.ts          # Kapruka MCP client
-│   │   │   └── types.ts           # TypeScript interfaces
-│   │   └── store/
-│   │       └── chat-store.ts      # Zustand state store
-│   ├── globals.css             # Design system & styles
-│   ├── layout.tsx              # Root layout
-│   └── page.tsx                # Main chat page
-├── .env.example                # Environment template
-├── .gitignore
-├── Dockerfile                  # Production Docker image
-├── docker-compose.yml          # Docker Compose config
-├── next.config.ts              # Next.js configuration
-├── package.json
-├── tsconfig.json
+│   ├── lib/
+│   │   ├── ai/                        # Intent, memory, ranker, parser, ghost-cart, tone
+│   │   ├── i18n/translations.ts       # English, Sinhala, and Tanglish packs
+│   │   ├── mcp/                       # Kapruka MCP JSON-RPC/SSE client & types
+│   │   ├── security/rate-limiter.ts   # Sliding-window limiter & sanitizer
+│   │   └── store/chat-store.ts        # Zustand client store
+│   ├── globals.css
+│   ├── layout.tsx
+│   ├── loading.tsx
+│   └── page.tsx
+├── public/                            # PWA manifest, icons, service worker
+├── .env.example                       # Environment template
+├── Dockerfile                         # Multi-stage production container
+├── docker-compose.yml
+├── next.config.ts                     # Security headers & image remotePatterns
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
 ├── DEPLOYMENT.md
 ├── INSTALL.md
 ├── LICENSE
-├── README.md
 └── SECURITY.md
 ```
 
 ---
 
-## 📡 API Documentation
+## Getting Started
 
-### `POST /api/chat` — Main Chat Endpoint
+### Prerequisites
 
-Streaming endpoint that handles all conversational AI interactions.
+- **Node.js** `>= 18.18.0` (Node 20/22 LTS recommended)
+- **npm** `>= 9.0.0`
 
-**Request Body:**
-```json
-{
-  "message": "Show me birthday cakes under Rs. 5000",
-  "sessionId": "kasa-abc123",
-  "language": "en",
-  "cart": [],
-  "giftMode": false,
-  "deliveryCity": "Colombo",
-  "deliveryDate": "2026-07-15"
-}
+### Local Installation
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/theekshana-sudeepa/kasa.git
+cd kasa
+
+# 2. Install dependencies
+npm install
+
+# 3. Configure environment variables
+cp .env.example .env.local
 ```
 
-**Response:** Server-Sent text stream with embedded structured tags:
-- `<PRODUCTS>` — Product listings with images
-- `<QUICK_REPLIES>` — Suggested quick actions
-- `<DELIVERY>` — Delivery availability info
-- `<ORDER>` — Order confirmation details
-- `<TRACKING>` — Order tracking timeline
-- `<CATEGORIES>` — Category listings
-- `<CHECKOUT_FORM/>` — Trigger checkout form
-- `<MOOD>` — Detected mood signal
-- `<SMART_SUGGESTIONS>` — Next-best-action suggestions
+Edit `.env.local` with at least one AI provider key (or leave blank to run in zero-key smart fallback mode):
 
-### `GET /api/dashboard` — Telemetry Data
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GROQ_API_KEY` | Optional* | [Groq](https://console.groq.com) API key (recommended, Llama 3.3 70B) |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Optional* | [Google AI Studio](https://aistudio.google.com/apikey) API key (Gemini 2.0 Flash) |
+| `OPENAI_API_KEY` | Optional* | [OpenAI](https://platform.openai.com/api-keys) API key (GPT-4o-mini) |
+| `MCP_ENDPOINT` | Optional | Custom MCP endpoint (defaults to `https://mcp.kapruka.com/mcp`) |
 
-Returns real-time system metrics for the admin dashboard.
+> *Providers are evaluated in order: `GROQ_API_KEY` -> `GOOGLE_GENERATIVE_AI_API_KEY` -> `OPENAI_API_KEY` -> Zero-Key Fallback Engine.
 
-### `POST /api/suggestions` — Smart Suggestions
+### Development & Production Commands
 
-Returns context-aware suggestions based on conversation state.
+```bash
+# Run development server (http://localhost:3000)
+npm run dev
 
-### `POST /api/delivery/check` — Delivery Check
+# Verify lint and production build
+npm run lint
+npm run build
 
-Checks delivery availability for a city/date/product combination.
-
-### `POST /api/order/create` — Create Order
-
-Creates a guest checkout order through the Kapruka MCP.
-
-### `POST /api/cart/sync` — Cart Sync
-
-Synchronizes cart state and computes totals.
+# Start production server
+npm start
+```
 
 ---
 
-## 🚢 Deployment
+## API Reference
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment guides for:
-
-- **Docker** — Multi-stage production build
-- **Vercel** — Recommended, zero-config
-- **Netlify** — Static export + serverless
-- **Railway** — One-click deploy
-- **Render** — Free tier available
-- **DigitalOcean App Platform**
-- **AWS** (ECS/Fargate)
-- **VPS** (Ubuntu + Nginx)
-- **Cloudflare Pages**
-
-### Quick Deploy: Vercel
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/ThikkaBro/kasa)
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/chat` | `POST` | Streaming conversational endpoint emitting prose + structured UI tags (`<PRODUCTS>`, `<CATEGORIES>`, `<DELIVERY>`, `<ORDER>`, `<TRACKING>`, `<QUICK_REPLIES>`, `<MOOD>`, `<CHECKOUT_FORM/>`) |
+| `/api/chat/parsed` | `POST` | Returns pre-parsed structured response payloads |
+| `/api/cart/sync` | `POST` | Synchronizes cart items and calculates totals |
+| `/api/delivery/check` | `POST` | Validates delivery coverage by Sri Lankan city and date |
+| `/api/order/create` | `POST` | Submits guest checkout orders via Kapruka MCP |
+| `/api/suggestions` | `POST` | Generates contextual next-best-action shopping prompts |
+| `/api/dashboard` | `GET` | Exposes active session, mood distribution, Ghost Cart, and MCP telemetry |
 
 ---
 
-## 🐛 Troubleshooting
+## Deployment
 
-| Issue | Solution |
-|-------|---------|
-| **No AI responses** | Add at least one AI API key to `.env.local`. KASA works without one but uses limited fallback mode. |
-| **MCP connection fails** | Check if `https://mcp.kapruka.com/mcp` is accessible. May be temporarily down. |
-| **Build fails** | Run `npm install` to ensure all dependencies are installed. Check Node.js version ≥ 18.18. |
-| **Voice input not working** | Requires HTTPS in production. Works on localhost during development. |
-| **Images not loading** | Kapruka product images are loaded from external domains configured in `next.config.ts`. |
+KASA supports one-click cloud hosting and containerized self-hosting. See [DEPLOYMENT.md](DEPLOYMENT.md) for platform-specific instructions covering Docker, Vercel, Netlify, Railway, Render, AWS ECS, and Nginx + PM2.
 
----
+### Quick Deploy to Vercel
 
-## ❓ FAQ
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/theekshana-sudeepa/kasa)
 
-**Q: Do I need an API key to use KASA?**
-A: No. KASA has a smart fallback engine that handles product search, cart, checkout, and order tracking without any AI key. Add one for full conversational AI capabilities.
+### Quick Deploy with Docker
 
-**Q: Which AI provider is best?**
-A: **Groq** (free) is recommended for the best balance of speed and quality. It uses Llama 3.3 70B.
-
-**Q: Does KASA store my data?**
-A: KASA stores conversation state in server memory only during the active session (1-hour TTL). No data is persisted to disk or external databases. Cart preferences are stored in the browser's localStorage.
-
-**Q: Can I use this for other e-commerce platforms?**
-A: The MCP client layer is abstracted and can be adapted to other MCP-compatible e-commerce APIs.
+```bash
+docker compose up -d --build
+```
 
 ---
 
-## 🗺️ Roadmap
+## Security & Privacy
 
-- [ ] **Payment integration** — Direct payment processing within chat
-- [ ] **Multi-vendor support** — Extend beyond Kapruka
-- [ ] **User accounts** — Persistent profiles and order history
-- [ ] **Push notifications** — Order status updates
-- [ ] **AI-generated gift recommendations** — Vision-based matching
-- [ ] **Tamil language support** — Full native Tamil UI and AI responses
-- [ ] **PWA support** — Installable progressive web app
-- [ ] **Analytics dashboard** — Conversion funnel tracking
+- All API keys remain strictly server-side via environment variables — never exposed to client bundles.
+- No database persistence of customer chats; server session state resides in ephemeral memory with automatic 1-hour TTL eviction.
+- See [SECURITY.md](SECURITY.md) for security headers and responsible disclosure guidelines.
 
 ---
 
-## 🤝 Contributing
+## License
 
-Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
-
----
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE).
-
----
-
-## 🙏 Credits
-
-Developed and maintained by **[ThikkaBro](https://github.com/ThikkaBro)**
-
-### Acknowledgments
-
-- [Kapruka.com](https://www.kapruka.com) — Sri Lanka's premier e-commerce platform
-- [Vercel AI SDK](https://sdk.vercel.ai/) — AI integration framework
-- [Next.js](https://nextjs.org/) — React framework
-- [Zustand](https://zustand.docs.pmnd.rs/) — State management
-- [Framer Motion](https://www.framer.com/motion/) — Animation library
-- [Lucide](https://lucide.dev/) — Icon library
+This project is open-source software licensed under the [MIT License](LICENSE).
 
 ---
 
 <div align="center">
 
-**Built with ❤️ in Sri Lanka**
+**Engineered by [Theekshana Sudeepa](https://github.com/theekshana-sudeepa)**
+
+[LinkedIn](https://www.linkedin.com/in/theekshana-sudeepa/) · [GitHub](https://github.com/theekshana-sudeepa) · [LexoraTech](https://lexoratech.com)
 
 </div>

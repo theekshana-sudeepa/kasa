@@ -19,7 +19,7 @@ Complete installation instructions for all platforms and package managers.
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/ThikkaBro/kasa.git
+git clone https://github.com/theekshana-sudeepa/kasa.git
 cd kasa
 ```
 
