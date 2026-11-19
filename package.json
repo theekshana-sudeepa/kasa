@@ -2,13 +2,13 @@
   "name": "kasa",
   "version": "1.0.0",
   "description": "KASA (කැස) — AI Shopping Concierge for Kapruka.com. Discover products, compare options, and checkout through natural conversation with emotional intelligence and Sinhala language support.",
-  "author": "ThikkaBro",
+  "author": "Theekshana Sudeepa",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/ThikkaBro/kasa.git"
+    "url": "https://github.com/theekshana-sudeepa/kasa.git"
   },
-  "homepage": "https://github.com/ThikkaBro/kasa",
+  "homepage": "https://github.com/theekshana-sudeepa/kasa",
   "private": true,
   "scripts": {
     "dev": "next dev",
