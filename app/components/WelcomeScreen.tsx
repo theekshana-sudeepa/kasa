@@ -1,8 +1,10 @@
 'use client';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useSyncExternalStore } from 'react';
 import { useChatStore } from '../lib/store/chat-store';
 import { getFestivalContext } from '../lib/ai/system-prompt';
 import { motion } from 'framer-motion';
+
+const emptySubscribe = () => () => {};
 
 interface WelcomeScreenProps {
   onChipClick: (text: string) => void;
@@ -27,7 +29,7 @@ const giftChips = [
 const tagline = "The only AI that shops like a Sri Lankan thinks.";
 
 export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
   const [typedText, setTypedText] = useState('');
   const [showCursor, setShowCursor] = useState(true);
   const userMemory = useChatStore((state) => state.userMemory);
@@ -35,8 +37,6 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
   const typingRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
-    setMounted(true);
-    
     let i = 0;
     const type = () => {
       if (i <= tagline.length) {
@@ -212,7 +212,7 @@ export default function WelcomeScreen({ onChipClick }: WelcomeScreenProps) {
         variants={itemVariants}
         className="welcome-footer"
       >
-        Powered by <strong>ThikkaBro</strong> {'\uD83C\uDDF1\uD83C\uDDF0'}
+        Powered by <strong>Kapruka MCP</strong> {'\uD83C\uDDF1\uD83C\uDDF0'}
       </motion.div>
     </motion.div>
   );

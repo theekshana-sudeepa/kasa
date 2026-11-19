@@ -1,6 +1,6 @@
 import type { MCPToolResult } from './types';
 
-const MCP_ENDPOINT = 'https://mcp.kapruka.com/mcp';
+const MCP_ENDPOINT = process.env.MCP_ENDPOINT || 'https://mcp.kapruka.com/mcp';
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
 
