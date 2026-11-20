@@ -13,7 +13,7 @@
  */
 
 import type { ParsedResponse } from './response-parser';
-import type { ConversationMemory, GhostCartItem, MCPTelemetry, Mood } from '../mcp/types';
+import type { ConversationMemory, MCPTelemetry, Mood } from '../mcp/types';
 import { createEmptyMemory } from './memory-engine';
 
 export type Message = { role: 'user' | 'assistant' | 'system'; content: string };

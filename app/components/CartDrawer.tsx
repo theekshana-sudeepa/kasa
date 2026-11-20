@@ -112,6 +112,7 @@ export default function CartDrawer({ isOpen, onClose, onCheckout }: CartDrawerPr
                 alignItems: 'center',
               }}>
                 {item.image_url && !item.image_url.includes('placehold') ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- Dynamic external Kapruka MCP product image URL
                   <img
                     src={item.image_url}
                     alt={item.name}
@@ -194,7 +195,11 @@ export default function CartDrawer({ isOpen, onClose, onCheckout }: CartDrawerPr
                       <Plus size={12} />
                     </button>
                     <button
-                      onClick={() => removeFromCart(item.product_id)}
+                      onClick={() => {
+                        removeFromCart(item.product_id);
+                        toast.info(`Removed ${item.name} from cart`);
+                      }}
+                      aria-label={`Remove ${item.name}`}
                       style={{
                         marginLeft: 'auto',
                         display: 'flex', alignItems: 'center', gap: '4px',

@@ -1,8 +1,12 @@
 import type { MCPToolResult } from './types';
+import { recordMCPRequest, setCircuitBreakerState } from '../ai/session-store';
 
 const MCP_ENDPOINT = process.env.MCP_ENDPOINT || 'https://mcp.kapruka.com/mcp';
 const MAX_RETRIES = 3;
 const BASE_DELAY_MS = 1000;
+const REQUEST_TIMEOUT_MS = 12_000;
+const CIRCUIT_BREAKER_THRESHOLD = 5;
+const CIRCUIT_BREAKER_COOLDOWN_MS = 30_000;
 
 interface JSONRPCRequest {
   jsonrpc: '2.0';
@@ -27,12 +31,46 @@ export class KaprukaMCPClient {
   private requestCounter = 0;
   private initialized = false;
   private initializing: Promise<void> | null = null;
+  private consecutiveFailures = 0;
+  private circuitOpenedAt: number | null = null;
 
   private nextId(): number {
     return ++this.requestCounter;
   }
 
+  private checkCircuitBreaker(): void {
+    if (this.circuitOpenedAt === null) return;
+    if (Date.now() - this.circuitOpenedAt >= CIRCUIT_BREAKER_COOLDOWN_MS) {
+      // Half-open: allow probe request
+      this.circuitOpenedAt = null;
+      this.consecutiveFailures = 0;
+      setCircuitBreakerState(false);
+      return;
+    }
+    throw new Error('MCP circuit breaker is open — temporarily cooling down');
+  }
+
+  private recordSuccess(durationMs: number): void {
+    this.consecutiveFailures = 0;
+    if (this.circuitOpenedAt !== null) {
+      this.circuitOpenedAt = null;
+      setCircuitBreakerState(false);
+    }
+    recordMCPRequest(durationMs, true);
+  }
+
+  private recordFailure(durationMs: number): void {
+    this.consecutiveFailures += 1;
+    if (this.consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+      this.circuitOpenedAt = Date.now();
+      setCircuitBreakerState(true);
+    }
+    recordMCPRequest(durationMs, false);
+  }
+
   private async sendRequest(body: JSONRPCRequest): Promise<JSONRPCResponse> {
+    this.checkCircuitBreaker();
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'application/json, text/event-stream',
@@ -43,13 +81,18 @@ export class KaprukaMCPClient {
     }
 
     let lastError: Error | null = null;
+    const reqStart = Date.now();
 
     for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
       try {
         const response = await fetch(MCP_ENDPOINT, {
           method: 'POST',
           headers,
           body: JSON.stringify(body),
+          signal: controller.signal,
         });
 
         if (response.status === 429) {
@@ -74,13 +117,19 @@ export class KaprukaMCPClient {
 
         // Handle SSE responses
         const contentType = response.headers.get('Content-Type') || '';
-        if (contentType.includes('text/event-stream')) {
-          return await this.parseSSEResponse(response);
-        }
+        const parsed = contentType.includes('text/event-stream')
+          ? await this.parseSSEResponse(response)
+          : ((await response.json()) as JSONRPCResponse);
 
-        return (await response.json()) as JSONRPCResponse;
+        this.recordSuccess(Date.now() - reqStart);
+        return parsed;
       } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
+        lastError =
+          err instanceof Error && err.name === 'AbortError'
+            ? new Error(`MCP request timed out after ${REQUEST_TIMEOUT_MS}ms`)
+            : err instanceof Error
+              ? err
+              : new Error(String(err));
 
         if (
           lastError.message.includes('400') ||
@@ -88,15 +137,19 @@ export class KaprukaMCPClient {
           lastError.message.includes('403') ||
           lastError.message.includes('404')
         ) {
+          this.recordFailure(Date.now() - reqStart);
           throw lastError;
         }
 
         if (attempt < MAX_RETRIES - 1) {
           await this.sleep(BASE_DELAY_MS * Math.pow(2, attempt));
         }
+      } finally {
+        clearTimeout(timeoutId);
       }
     }
 
+    this.recordFailure(Date.now() - reqStart);
     throw lastError || new Error('MCP request failed after retries');
   }
 

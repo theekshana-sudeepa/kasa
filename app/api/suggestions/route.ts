@@ -4,27 +4,42 @@
  * Returns context-aware suggestions based on conversation state.
  */
 
+import { z } from 'zod';
 import { generateSmartSuggestions, detectResponseType } from '@/app/lib/ai/suggestion-engine';
 import { getMemory, getMessageCount } from '@/app/lib/ai/session-store';
-import type { CartItem } from '@/app/lib/mcp/types';
+
+const SuggestionsRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  lastResponseText: z.string().optional().default(''),
+  hasProducts: z.boolean().optional().default(false),
+  cart: z
+    .array(
+      z.object({
+        product_id: z.string(),
+        name: z.string(),
+        price: z.number(),
+        quantity: z.number(),
+        image_url: z.string(),
+      })
+    )
+    .optional()
+    .default([]),
+  lastProductNames: z.array(z.string()).optional().default([]),
+});
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { sessionId, lastResponseText = '', hasProducts = false, cart = [], lastProductNames = [] } = body as {
-      sessionId: string;
-      lastResponseText: string;
-      hasProducts: boolean;
-      cart: CartItem[];
-      lastProductNames: string[];
-    };
+    const rawBody: unknown = await request.json();
+    const parsedBody = SuggestionsRequestSchema.safeParse(rawBody);
 
-    if (!sessionId) {
+    if (!parsedBody.success) {
       return new Response(JSON.stringify({ error: 'sessionId required' }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' },
       });
     }
+
+    const { sessionId, lastResponseText, hasProducts, cart, lastProductNames } = parsedBody.data;
 
     const memory = getMemory(sessionId);
     const messageCount = getMessageCount(sessionId);

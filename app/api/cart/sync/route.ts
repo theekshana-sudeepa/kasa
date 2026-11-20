@@ -1,18 +1,41 @@
+import { z } from 'zod';
+
+const CartSyncSchema = z.object({
+  cart: z.array(
+    z.object({
+      product_id: z.string(),
+      name: z.string(),
+      price: z.number().nonnegative(),
+      quantity: z.number().int().positive(),
+      image_url: z.string().optional().default(''),
+    })
+  ),
+});
+
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { cart } = body;
+    const rawBody: unknown = await request.json();
+    const parsed = CartSyncSchema.safeParse(rawBody);
 
-    if (!Array.isArray(cart)) {
-      return new Response(JSON.stringify({ error: 'cart must be an array' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+    if (!parsed.success) {
+      return new Response(JSON.stringify({ error: 'cart must be a valid array of cart items' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
     }
 
-    // Echo back and compute total
-    const total = cart.reduce((sum: number, item: { price?: number; quantity?: number }) => sum + (item.price || 0) * (item.quantity || 1), 0);
+    const { cart } = parsed.data;
+    const total = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
 
-    return new Response(JSON.stringify({ cart, total }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ cart, total }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   } catch (err) {
     console.error('[Cart Sync] error', err);
-    return new Response(JSON.stringify({ error: 'internal' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ error: 'internal' }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 }

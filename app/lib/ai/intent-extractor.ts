@@ -150,21 +150,68 @@ export async function extractIntent(
       jsonStr = jsonMatch[0];
     }
 
-    const parsed = JSON.parse(jsonStr);
+    const parsed = JSON.parse(jsonStr) as Partial<{
+      emotion: ExtractedIntent['emotion'];
+      shopping_intent: string;
+      search_queries: unknown[];
+      occasion: string;
+      tone: ExtractedIntent['tone'];
+      gift_target: string;
+      is_shopping: boolean;
+      intent_category: ExtractedIntent['intent_category'];
+      budget: { max: number; currency: string };
+      urgency: ExtractedIntent['urgency'];
+    }>;
 
-    const emotion = parsed.emotion || 'neutral';
+    const validEmotions: ReadonlyArray<ExtractedIntent['emotion']> = [
+      'sad', 'urgent', 'excited', 'anxious', 'angry', 'romantic', 'grateful', 'neutral',
+    ];
+    const emotion: ExtractedIntent['emotion'] =
+      parsed.emotion && validEmotions.includes(parsed.emotion) ? parsed.emotion : 'neutral';
+
+    const validTones: ReadonlyArray<ExtractedIntent['tone']> = [
+      'empathetic', 'excited', 'practical', 'urgent', 'warm', 'playful',
+    ];
+    const tone: ExtractedIntent['tone'] =
+      parsed.tone && validTones.includes(parsed.tone) ? parsed.tone : 'practical';
+
+    const validCategories: ReadonlyArray<ExtractedIntent['intent_category']> = [
+      'SEARCH', 'GIFT', 'CHECKOUT', 'TRACK', 'BROWSE', 'URGENT', 'CASUAL', 'CLARIFY',
+    ];
+    const intentCategory: ExtractedIntent['intent_category'] =
+      parsed.intent_category && validCategories.includes(parsed.intent_category)
+        ? parsed.intent_category
+        : 'SEARCH';
+
+    const validUrgencies: ReadonlyArray<ExtractedIntent['urgency']> = [
+      'same_day', 'next_day', 'this_week', 'no_rush', 'unknown',
+    ];
+    const urgency: ExtractedIntent['urgency'] =
+      parsed.urgency && validUrgencies.includes(parsed.urgency) ? parsed.urgency : 'unknown';
+
+    const searchQueries = Array.isArray(parsed.search_queries)
+      ? parsed.search_queries.filter((q): q is string => typeof q === 'string').slice(0, 3)
+      : [];
+
+    const budget =
+      parsed.budget &&
+      typeof parsed.budget.max === 'number' &&
+      typeof parsed.budget.currency === 'string'
+        ? parsed.budget
+        : undefined;
+
     // Validate and return with defaults
     return {
       emotion,
-      shopping_intent: parsed.shopping_intent || '',
-      search_queries: Array.isArray(parsed.search_queries) ? parsed.search_queries.slice(0, 3) : [],
-      occasion: parsed.occasion || 'none',
-      tone: parsed.tone || 'practical',
-      gift_target: parsed.gift_target || 'unknown',
-      is_shopping: parsed.is_shopping ?? true,
-      intent_category: parsed.intent_category || 'SEARCH',
-      budget: parsed.budget || undefined,
-      urgency: parsed.urgency || 'unknown',
+      shopping_intent: typeof parsed.shopping_intent === 'string' ? parsed.shopping_intent : '',
+      search_queries: searchQueries,
+      occasion: typeof parsed.occasion === 'string' ? parsed.occasion : 'none',
+      tone,
+      gift_target: typeof parsed.gift_target === 'string' ? parsed.gift_target : 'unknown',
+      is_shopping: typeof parsed.is_shopping === 'boolean' ? parsed.is_shopping : true,
+      intent_category: intentCategory,
+      budget,
+      urgency,
       confidence: 0.85, // AI-extracted intents have high confidence
       mood: emotionToMood(emotion),
       is_rejection: /\b(no|nah|not that|something else|different|don't like|skip)\b/i.test(message),

@@ -40,6 +40,7 @@ export default function CartSummary() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '16px' }}>
         {cart.map((item, idx) => (
           <div key={`${item.product_id}-${idx}`} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- Dynamic external Kapruka MCP product image URL */}
             <img 
               src={item.image_url} 
               alt={item.name} 

@@ -1,10 +1,14 @@
-import { streamText } from 'ai';
+import { streamText, type LanguageModel } from 'ai';
+import { createGroq } from '@ai-sdk/groq';
+import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { createOpenAI } from '@ai-sdk/openai';
+import { z } from 'zod';
 import { checkRateLimit, rateLimitResponse, sanitizeInput } from '@/app/lib/security/rate-limiter';
 import { buildSystemPrompt, getFestivalContext } from '@/app/lib/ai/system-prompt';
 import { getMCPClient } from '@/app/lib/mcp/client';
-import { extractIntent, extractIntentFallback, emotionToMood } from '@/app/lib/ai/intent-extractor';
+import { extractIntent, extractIntentFallback } from '@/app/lib/ai/intent-extractor';
 import type { ExtractedIntent } from '@/app/lib/ai/intent-extractor';
-import type { CartItem, Language, Product, Mood } from '@/app/lib/mcp/types';
+import type { CartItem, Product, Mood } from '@/app/lib/mcp/types';
 import {
   getConversation,
   addMessage,
@@ -12,11 +16,8 @@ import {
   getMemory,
   setMemory,
   setLastMood,
-  getMessageCount,
-  recordMCPRequest,
 } from '@/app/lib/ai/session-store';
-import { extractMemoryFromMessage, mergeMemory, formatMemoryForPrompt } from '@/app/lib/ai/memory-engine';
-import { generateSmartSuggestions, detectResponseType } from '@/app/lib/ai/suggestion-engine';
+import { extractMemoryFromMessage, mergeMemory } from '@/app/lib/ai/memory-engine';
 import { rankProducts } from '@/app/lib/ai/product-ranker';
 import {
   predictLikelyAdditions,
@@ -24,38 +25,44 @@ import {
   createGhostCartItem,
 } from '@/app/lib/ai/ghost-cart';
 
-type Message = { role: 'user' | 'assistant' | 'system'; content: string };
 const MAX_HISTORY = 30;
 
-interface ChatRequestBody {
-  message: string;
-  sessionId: string;
-  language: Language;
-  cart: CartItem[];
-  giftMode: boolean;
-  deliveryCity?: string;
-  deliveryDate?: string;
-  userName?: string;  // User's preferred name for personalization
+const CartItemSchema = z.object({
+  product_id: z.string(),
+  name: z.string(),
+  price: z.number(),
+  quantity: z.number(),
+  image_url: z.string(),
+});
+
+const ChatRequestSchema = z.object({
+  message: z.string(),
+  sessionId: z.string().min(1),
+  language: z.enum(['en', 'si', 'tanglish']).optional().default('en'),
+  cart: z.array(CartItemSchema).optional().default([]),
+  giftMode: z.boolean().optional().default(false),
+  deliveryCity: z.string().nullable().optional(),
+  deliveryDate: z.string().nullable().optional(),
+  userName: z.string().optional(),
+});
+
+interface ModelConfig {
+  model: LanguageModel;
+  provider: 'Groq' | 'Gemini' | 'OpenAI';
 }
 
 // ── AI Model Provider ───────────────────────────────────────────
-function getModel() {
+function getModel(): ModelConfig | null {
   try {
     if (process.env.GROQ_API_KEY) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { createGroq } = require('@ai-sdk/groq');
       const groq = createGroq({ apiKey: process.env.GROQ_API_KEY });
       return { model: groq('llama-3.3-70b-versatile'), provider: 'Groq' };
     }
     if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { createGoogleGenerativeAI } = require('@ai-sdk/google');
       const google = createGoogleGenerativeAI({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY });
       return { model: google('gemini-2.0-flash'), provider: 'Gemini' };
     }
     if (process.env.OPENAI_API_KEY) {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { createOpenAI } = require('@ai-sdk/openai');
       const openai = createOpenAI({ apiKey: process.env.OPENAI_API_KEY });
       return { model: openai('gpt-4o-mini'), provider: 'OpenAI' };
     }
@@ -164,7 +171,6 @@ async function parseProductsFromMarkdown(markdown: string): Promise<string> {
   }
 
   if (products.length > 0) {
-    const startTime = Date.now();
     await Promise.race([
       Promise.all(products.map(async (p) => {
         try {
@@ -175,7 +181,7 @@ async function parseProductsFromMarkdown(markdown: string): Promise<string> {
           if (typeof raw === 'object' && raw !== null) {
             data = raw as Record<string, unknown>;
           } else if (typeof raw === 'string') {
-            try { data = JSON.parse(raw); } catch { /* not JSON */ }
+            try { data = JSON.parse(raw) as Record<string, unknown>; } catch { /* not JSON */ }
           }
 
           if (data) {
@@ -194,7 +200,6 @@ async function parseProductsFromMarkdown(markdown: string): Promise<string> {
       })),
       new Promise(resolve => setTimeout(resolve, 6000)),
     ]);
-    recordMCPRequest(Date.now() - startTime, true);
 
     return `<PRODUCTS>${JSON.stringify(products)}</PRODUCTS>`;
   }
@@ -218,14 +223,12 @@ async function executeMCPToolsWithIntent(
       
       for (const query of intent.search_queries.slice(0, 2)) {
         try {
-          const startTime = Date.now();
           const searchResult = await mcpClient.searchProducts({
             query,
             in_stock_only: true,
             limit: 5,
             ...(intent.budget ? { max_price: intent.budget.max } : {}),
           });
-          recordMCPRequest(Date.now() - startTime, true);
           const parsed = mcpClient.parseResult<string>(searchResult);
           
           if (parsed && !parsed.includes('No products found')) {
@@ -314,9 +317,14 @@ async function generateFallbackResponse(
   
   // Update memory from this message
   const memory = getMemory(sessionId);
-  const memUpdates = extractMemoryFromMessage(message, memory, cart);
+  const memUpdates = extractMemoryFromMessage(message, memory);
   const updatedMemory = mergeMemory(memory, memUpdates);
+  const resolvedName = userName || updatedMemory.userName;
+  if (resolvedName) {
+    updatedMemory.userName = resolvedName;
+  }
   setMemory(sessionId, updatedMemory);
+  const namePrefix = resolvedName ? `, ${resolvedName}` : '';
   
   if (lower.match(/\b(urgent|asap|today|emergency|fast|quick)\b/i)) {
     urgencyPrefix = `**Urgency Detected:** I see you need this fast! I'll prioritize same-day delivery options available in Colombo & Suburbs.\n\n`;
@@ -394,7 +402,12 @@ async function generateFallbackResponse(
         address = parts.slice(2).join(', ') || 'Unknown';
       }
 
-      response = `Great, I've noted the delivery details:\n\n**Name:** ${name}\n**Phone:** ${phone}\n**Address:** ${address}\n\nIs this correct? If yes, how would you like to pay?`;
+      const senderLine =
+        senderName !== 'Unknown'
+          ? `\n**Sender:** ${senderName}${senderEmail !== 'Unknown' ? ` (${senderEmail})` : ''}`
+          : '';
+
+      response = `Great${namePrefix}, I've noted the delivery details:\n\n**Name:** ${name}\n**Phone:** ${phone}\n**Address:** ${address}${senderLine}\n\nIs this correct? If yes, how would you like to pay?`;
       response += `\n\n<QUICK_REPLIES>["Credit/Debit Card", "Cash on Delivery", "Bank Transfer", "No, let me re-enter details"]</QUICK_REPLIES>`;
     }
     // PAYMENT METHOD RESPONSE
@@ -590,7 +603,7 @@ async function generateFallbackResponse(
         else if (hour < 18) greeting = 'Good afternoon';
         else greeting = 'Good evening';
         
-        response = `${greeting}! I'm KASA — your shopping concierge for Kapruka.com. \n\nI can find electronics, groceries, cakes, flowers, gifts, and more. What are you looking for?\n\n<QUICK_REPLIES>["Show me trending items", "Birthday gift ideas", "Browse categories", "Surprise me!"]</QUICK_REPLIES>`;
+        response = `${greeting}${namePrefix}! I'm KASA — your shopping concierge for Kapruka.com. \n\nI can find electronics, groceries, cakes, flowers, gifts, and more. What are you looking for?\n\n<QUICK_REPLIES>["Show me trending items", "Birthday gift ideas", "Browse categories", "Surprise me!"]</QUICK_REPLIES>`;
         mood = 'warm';
       }
       // Default
@@ -644,17 +657,25 @@ export async function POST(request: Request) {
     const { limited, resetAt } = checkRateLimit(request, { maxRequests: 30, windowMs: 60_000 });
     if (limited) return rateLimitResponse(resetAt);
 
-    const body = (await request.json()) as ChatRequestBody;
+    const rawBody: unknown = await request.json();
+    const parsedBody = ChatRequestSchema.safeParse(rawBody);
+    if (!parsedBody.success) {
+      return new Response('Please type a message to get started!', {
+        status: 400,
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      });
+    }
+
     const {
       message: rawMessage,
       sessionId,
-      language = 'en',
-      cart = [],
-      giftMode = false,
+      language,
+      cart,
+      giftMode,
       deliveryCity,
       deliveryDate,
       userName,
-    } = body;
+    } = parsedBody.data;
 
     // ── Input Sanitization ──
     const message = sanitizeInput(rawMessage);
@@ -667,15 +688,19 @@ export async function POST(request: Request) {
 
     // ── Step 1: Update Conversation Memory ──
     const currentMemory = getMemory(sessionId);
-    const memoryUpdates = extractMemoryFromMessage(message, currentMemory, cart);
+    const memoryUpdates = extractMemoryFromMessage(message, currentMemory);
     const updatedMemory = mergeMemory(currentMemory, memoryUpdates);
     if (deliveryCity && !updatedMemory.deliveryCity) {
       updatedMemory.deliveryCity = deliveryCity;
+    }
+    if (deliveryDate && !updatedMemory.deliveryDate) {
+      updatedMemory.deliveryDate = deliveryDate;
     }
     // Store user name in memory for the session
     if (userName) {
       updatedMemory.userName = userName;
     }
+    setMemory(sessionId, updatedMemory);
 
     // ── Step 2: Try AI-powered response ──
     const modelConfig = getModel();
@@ -786,13 +811,14 @@ export async function POST(request: Request) {
           system: systemPrompt,
           messages: history,
           temperature: 0.7,
+          abortSignal: request.signal,
           onFinish: async (event) => {
             if (event.text) {
               let finalText = event.text;
               if (preFormattedTag) finalText += '\n' + preFormattedTag;
               if (preFormattedCatTag) finalText += '\n' + preFormattedCatTag;
-              history.push({ role: 'assistant' as const, content: finalText });
               setConversation(sessionId, history);
+              addMessage(sessionId, { role: 'assistant', content: finalText });
             }
           },
         });
@@ -831,23 +857,43 @@ export async function POST(request: Request) {
 
     // ── Step 3: Smart Fallback ──
     if (process.env.NODE_ENV === 'development') console.log('[KASA] Using smart fallback (no AI key)');
+    addMessage(sessionId, { role: 'user', content: message });
     const { text: fallbackResponse } = await generateFallbackResponse(sessionId, message, cart, userName);
+    addMessage(sessionId, { role: 'assistant', content: fallbackResponse });
 
     const encoder = new TextEncoder();
-    const stream = new ReadableStream({
+    let cancelled = false;
+    const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
-        for (let i = 0; i < fallbackResponse.length; i++) {
-          controller.enqueue(encoder.encode(fallbackResponse[i]));
-          await new Promise((resolve) => setTimeout(resolve, 5));
+        try {
+          // Stream in small chunks for crisp, responsive typing without excessive timer overhead
+          const chunkSize = 8;
+          for (let i = 0; i < fallbackResponse.length; i += chunkSize) {
+            if (cancelled || request.signal.aborted) {
+              break;
+            }
+            controller.enqueue(encoder.encode(fallbackResponse.slice(i, i + chunkSize)));
+            await new Promise((resolve) => setTimeout(resolve, 12));
+          }
+        } finally {
+          if (!cancelled) {
+            try {
+              controller.close();
+            } catch {
+              /* stream already closed */
+            }
+          }
         }
-        controller.close();
+      },
+      cancel() {
+        cancelled = true;
       },
     });
 
     return new Response(stream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
-        'Transfer-Encoding': 'chunked',
+        'Cache-Control': 'no-cache, no-transform',
       },
     });
   } catch (error: unknown) {

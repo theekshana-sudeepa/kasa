@@ -70,6 +70,7 @@ export default function ProductCard({ product }: ProductCardProps) {
                   <Package size={32} style={{ opacity: 0.3 }} />
                 </div>
               )}
+              {/* eslint-disable-next-line @next/next/no-img-element -- Dynamic external Kapruka MCP product image URL with custom shimmer & error fallback */}
               <img
                 className="product-card-image"
                 src={product.image_url}

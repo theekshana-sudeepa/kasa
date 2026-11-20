@@ -42,6 +42,7 @@ export default function ComparisonTable({ products }: ComparisonTableProps) {
             <td>Image</td>
             {products.map((p, idx) => (
               <td key={idx}>
+                {/* eslint-disable-next-line @next/next/no-img-element -- Dynamic external Kapruka MCP product image URL */}
                 <img src={p.image_url} alt={p.name} style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' }} />
               </td>
             ))}

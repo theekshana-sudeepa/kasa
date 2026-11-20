@@ -8,7 +8,7 @@
  * rejected products, mentioned names, and more.
  */
 
-import type { ConversationMemory, CartItem } from '../mcp/types';
+import type { ConversationMemory } from '../mcp/types';
 
 /**
  * Create a fresh empty memory
@@ -37,8 +37,7 @@ export function createEmptyMemory(): ConversationMemory {
  */
 export function extractMemoryFromMessage(
   message: string,
-  existingMemory: ConversationMemory,
-  cart: CartItem[] = []
+  existingMemory: ConversationMemory
 ): Partial<ConversationMemory> {
   const lower = message.toLowerCase();
   const updates: Partial<ConversationMemory> = {};
@@ -216,7 +215,7 @@ export function extractMemoryFromMessage(
 
   // ── Sender/Recipient Info from Checkout ──
   if (lower.includes('| sender:')) {
-    const [recipPart, senderPart] = message.split('| Sender:');
+    const [, senderPart] = message.split('| Sender:');
     if (senderPart) {
       const sParts = senderPart.split(',').map((s) => s.trim());
       if (sParts.length >= 2) {

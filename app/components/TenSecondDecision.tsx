@@ -65,6 +65,7 @@ export default function TenSecondDecision({ product, onDecisionMade }: TenSecond
       </div>
       
       <div className="tsd-product">
+        {/* eslint-disable-next-line @next/next/no-img-element -- Dynamic external Kapruka MCP product image URL */}
         {product.image_url && <img src={product.image_url} alt={product.name} />}
         <div className="tsd-info">
           <p className="tsd-name">{product.name}</p>

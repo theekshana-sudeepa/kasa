@@ -17,7 +17,7 @@ import CategoryGrid from './components/CategoryGrid';
 import MoodBackground from './components/MoodBackground';
 import VoiceInput from './components/VoiceInput';
 import SmartSuggestions from './components/SmartSuggestions';
-import type { ChatMessage, Mood } from './lib/mcp/types';
+import type { ChatMessage } from './lib/mcp/types';
 import { parseAssistantResponse } from './lib/ai/response-parser';
 import { ChevronDown, Gift, Package, LayoutGrid, ShoppingCart } from 'lucide-react';
 import KasaAvatar from './components/KasaAvatar';
@@ -31,6 +31,26 @@ const CartSummary = dynamic(() => import('./components/CartSummary'), { ssr: fal
 const TenSecondDecision = dynamic(() => import('./components/TenSecondDecision'), { ssr: false });
 const GroupGiftLink = dynamic(() => import('./components/GroupGiftLink'), { ssr: false });
 const GiftMessageCard = dynamic(() => import('./components/GiftMessageCard'), { ssr: false });
+
+/**
+ * Try to extract a person's name from a raw text message.
+ * Handles: "I'm Alex", "My name is Alex", "Alex", "Call me Alex"
+ */
+function extractNameFromMessage(msg: string): string | null {
+  const clean = msg.trim();
+  const patterns = [
+    /^(?:i[''']m|i am|my name is|call me|they call me|you can call me|it[''']s)\s+([a-z][a-z\-]{0,29})/i,
+    /^([a-z][a-z\-]{0,29})(?:\s+here)?[.!]?$/i,
+  ];
+  for (const p of patterns) {
+    const m = clean.match(p);
+    if (m && m[1]) {
+      const reject = /^(hi|hey|hello|yes|no|ok|okay|sure|skip|later|none|na|nah|bot|kasa)$/i;
+      if (!reject.test(m[1])) return m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
+    }
+  }
+  return null;
+}
 
 export default function Home() {
   const {
@@ -63,29 +83,14 @@ export default function Home() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  // ── Name extraction helper ──────────────────────────────────────
-  /**
-   * Try to extract a person's name from a raw text message.
-   * Handles: "I'm Alex", "My name is Alex", "Alex", "Call me Alex"
-   */
-  function extractNameFromMessage(msg: string): string | null {
-    const clean = msg.trim();
-    // Direct name intro patterns
-    const patterns = [
-      /^(?:i[''']m|i am|my name is|call me|they call me|you can call me|it[''']s)\s+([a-z][a-z\-]{0,29})/i,
-      /^([a-z][a-z\-]{0,29})(?:\s+here)?[.!]?$/i, // Single word reply like "Alex" or "Alex!"
-    ];
-    for (const p of patterns) {
-      const m = clean.match(p);
-      if (m && m[1]) {
-        // Quick sanity: reject if it's a common non-name word
-        const reject = /^(hi|hey|hello|yes|no|ok|okay|sure|skip|later|none|na|nah|bot|kasa)$/i;
-        if (!reject.test(m[1])) return m[1].charAt(0).toUpperCase() + m[1].slice(1).toLowerCase();
-      }
-    }
-    return null;
-  }
+  // Abort any active stream on unmount
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -120,13 +125,16 @@ export default function Home() {
     el.style.height = Math.min(el.scrollHeight, 120) + 'px';
   }, []);
 
-  const sendMessage = useCallback(async (text: string) => {
+  const sendMessage = useCallback(async (
+    text: string,
+    options?: { skipUserBubble?: boolean; overrideUserName?: string }
+  ) => {
     if (!text.trim() || isLoading) return;
 
     // ── Name capture intercept ──
     // If we don't know the user's name and this is their first message,
     // show a name-ask card FIRST, then fire the real query after.
-    if (!userName && messages.length === 0 && !nameCapturePending) {
+    if (!userName && !options?.overrideUserName && messages.length === 0 && !nameCapturePending) {
       // Add user message to chat
       addMessage({
         id: `user-${Date.now()}`,
@@ -149,10 +157,11 @@ export default function Home() {
     }
 
     let effectiveText = text.trim();
-    let resolvedUserName = userName;
+    let resolvedUserName = options?.overrideUserName ?? userName;
+    let shouldSkipUserBubble = options?.skipUserBubble ?? false;
 
     // ── If name capture is pending: user typed a name instead of using the card ──
-    if (nameCapturePending) {
+    if (nameCapturePending && !options?.skipUserBubble) {
       const detectedName = extractNameFromMessage(effectiveText);
       if (detectedName) {
         resolvedUserName = detectedName;
@@ -162,23 +171,26 @@ export default function Home() {
         useChatStore.setState((s) => ({
           messages: s.messages.filter((m) => !m.content.startsWith('__NAME_CAPTURE__')),
         }));
-        // Continue with the held original query if present
+        // Continue with the held original query if present (original bubble already shown)
         if (pendingQuery) {
           effectiveText = pendingQuery;
           setPendingQuery(null);
+          shouldSkipUserBubble = true;
         } else {
           return;
         }
       }
     }
 
-    const userMsg: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: effectiveText,
-      timestamp: Date.now(),
-    };
-    addMessage(userMsg);
+    if (!shouldSkipUserBubble) {
+      const userMsg: ChatMessage = {
+        id: `user-${Date.now()}`,
+        role: 'user',
+        content: effectiveText,
+        timestamp: Date.now(),
+      };
+      addMessage(userMsg);
+    }
     setInput('');
     setLoading(true);
 
@@ -197,11 +209,15 @@ export default function Home() {
     }
 
     const assistantMsgId = `assistant-${Date.now()}`;
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           message: effectiveText,
           sessionId,
@@ -215,6 +231,9 @@ export default function Home() {
       });
 
       if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error('RATE_LIMITED');
+        }
         throw new Error(`HTTP ${response.status}`);
       }
 
@@ -233,6 +252,11 @@ export default function Home() {
 
       while (true) {
         const { done, value } = await reader.read();
+
+        if (controller.signal.aborted) {
+          await reader.cancel().catch(() => {});
+          break;
+        }
         
         if (value) {
           const chunk = decoder.decode(value, { stream: !done });
@@ -289,16 +313,25 @@ export default function Home() {
         if (done) break;
       }
 
-    } catch {
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      const isRateLimited = err instanceof Error && err.message === 'RATE_LIMITED';
       addMessage({
         id: `error-${Date.now()}`,
         role: 'assistant',
-        content: "Something went wrong on my end. If you haven't set an API key in .env.local, products won't load. Try again or browse by category!",
+        content: isRateLimited
+          ? 'You are sending messages a bit fast — please wait a few seconds and try again.'
+          : 'I ran into a temporary connection issue while reaching the shopping service. Please try again or browse by category!',
         timestamp: Date.now(),
         quickReplies: ['Try again', 'Browse categories', 'Show me gifts'],
       });
     } finally {
-      setLoading(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        setLoading(false);
+      }
     }
   }, [isLoading, sessionId, language, cart, giftMode, deliveryCity, deliveryDate, userName,
       nameCapturePending, pendingQuery, messages.length,
@@ -315,8 +348,10 @@ export default function Home() {
 
 
   const handleNewChat = () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
     useChatStore.getState().newChat();
-    setMood('neutral' as Mood);
+    setMood('neutral');
     setSmartSuggestions([]);
   };
 
@@ -449,10 +484,11 @@ export default function Home() {
                             useChatStore.setState((s) => ({
                               messages: s.messages.filter((m) => m.content !== '__NAME_CAPTURE__'),
                             }));
-                            // Fire the held query with the known name
+                            // Fire the held query with the known name (without duplicating user bubble)
                             if (pendingQuery) {
+                              const held = pendingQuery;
                               setPendingQuery(null);
-                              sendMessage(pendingQuery);
+                              void sendMessage(held, { skipUserBubble: true, overrideUserName: name });
                             }
                           }}
                           onSkip={() => {
@@ -461,8 +497,9 @@ export default function Home() {
                               messages: s.messages.filter((m) => m.content !== '__NAME_CAPTURE__'),
                             }));
                             if (pendingQuery) {
+                              const held = pendingQuery;
                               setPendingQuery(null);
-                              sendMessage(pendingQuery);
+                              void sendMessage(held, { skipUserBubble: true });
                             }
                           }}
                         />

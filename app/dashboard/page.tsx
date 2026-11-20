@@ -1,16 +1,17 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { 
   Activity, Users, Zap, Brain, Ghost,
   MessageSquare, TrendingUp, Clock, ArrowLeft, Server, Shield
 } from 'lucide-react';
 import Link from 'next/link';
+import type { MCPTelemetry, Mood } from '../lib/mcp/types';
 import './dashboard.css';
 
 interface DashboardData {
   sessions: { activeSessions: number; totalMessages: number; moodDistribution: Record<string, number> };
-  telemetry: { totalRequests: number; successfulRequests: number; failedRequests: number; avgResponseTimeMs: number; lastResponseTimeMs: number; circuitBreakerOpen: boolean };
+  telemetry: MCPTelemetry;
   ghostCart: { activeSessions: number; totalPredictions: number };
 }
 
@@ -36,7 +37,7 @@ function AnimatedCounter({ value, duration = 1500 }: { value: number; duration?:
   return <>{count.toLocaleString()}</>;
 }
 
-const MOOD_COLORS: Record<string, string> = {
+const MOOD_COLORS: Record<Mood, string> = {
   neutral: '#8b5cf6',
   warm: '#f59e0b',
   excited: '#ec4899',
@@ -45,7 +46,7 @@ const MOOD_COLORS: Record<string, string> = {
   calm: '#14b8a6',
 };
 
-const MOOD_LABELS: Record<string, string> = {
+const MOOD_LABELS: Record<Mood, string> = {
   neutral: 'Neutral',
   warm: 'Warm',
   excited: 'Excited',
@@ -54,27 +55,38 @@ const MOOD_LABELS: Record<string, string> = {
   calm: 'Calm',
 };
 
+function isMood(key: string): key is Mood {
+  return key in MOOD_COLORS;
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [lastRefresh, setLastRefresh] = useState<string>('');
   const [mounted, setMounted] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchData = useCallback(async () => {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     try {
-      const res = await fetch('/api/dashboard');
+      const res = await fetch('/api/dashboard', { signal: controller.signal });
       if (res.ok) {
-        const json = await res.json();
+        const json = (await res.json()) as DashboardData;
         setData(json);
       }
-    } catch {
-      // Dashboard API not available — use static data
+      setLastRefresh(new Date().toLocaleTimeString());
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      // Dashboard API not available — use static fallback
       setData({
         sessions: { activeSessions: 0, totalMessages: 0, moodDistribution: { neutral: 0 } },
         telemetry: { totalRequests: 0, successfulRequests: 0, failedRequests: 0, avgResponseTimeMs: 0, lastResponseTimeMs: 0, circuitBreakerOpen: false },
         ghostCart: { activeSessions: 0, totalPredictions: 0 },
       });
+      setLastRefresh(new Date().toLocaleTimeString());
     }
-    setLastRefresh(new Date().toLocaleTimeString());
   }, []);
 
   useEffect(() => {
@@ -88,6 +100,7 @@ export default function DashboardPage() {
     return () => {
       clearTimeout(initTimer);
       clearInterval(interval);
+      abortControllerRef.current?.abort();
     };
   }, [fetchData]);
 
@@ -190,11 +203,11 @@ export default function DashboardPage() {
           <div className="dash-mood-bars">
             {moodEntries.length > 0 && moodEntries.some(([, v]) => v > 0) ? moodEntries.map(([mood, count]) => (
               <div key={mood} className="dash-mood-row">
-                <span className="dash-mood-label">{MOOD_LABELS[mood] || mood}</span>
+                <span className="dash-mood-label">{isMood(mood) ? MOOD_LABELS[mood] : mood}</span>
                 <div className="dash-mood-bar-bg">
                   <motion.div
                     className="dash-mood-bar-fill"
-                    style={{ background: MOOD_COLORS[mood] || '#8b5cf6' }}
+                    style={{ background: isMood(mood) ? MOOD_COLORS[mood] : '#8b5cf6' }}
                     initial={{ width: 0 }}
                     animate={{ width: `${(count / totalMoodSessions) * 100}%` }}
                     transition={{ duration: 1, delay: 0.5, ease: 'easeOut' }}

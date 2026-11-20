@@ -34,6 +34,10 @@ export const metadata: Metadata = {
   description:
     "KASA (කැස) is your personal AI shopping concierge for Kapruka.com — Sri Lanka's largest e-commerce platform. Discover products, compare options, and checkout through natural conversation. Supports Sinhala, Tanglish, and English.",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/icon-192.png",
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

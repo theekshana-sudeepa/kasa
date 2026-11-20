@@ -15,7 +15,7 @@ export interface UserMemory {
   hasOrderedBefore?: boolean;
 }
 
-interface ChatState {
+export interface ChatState {
   messages: ChatMessage[];
   cart: CartItem[];
   language: Language;
@@ -54,9 +54,12 @@ interface ChatState {
   newChat: () => void;
 }
 
-// Use a fixed session ID to avoid SSR/client mismatch
-// It will be unique per tab since the store is created fresh each time
-const SESSION_ID = 'kasa-' + Math.random().toString(36).slice(2, 10);
+function createSessionId(): string {
+  return 'kasa-' + Math.random().toString(36).slice(2, 10);
+}
+
+// Use a fixed initial session ID per module instance to keep client state stable
+const INITIAL_SESSION_ID = createSessionId();
 
 export const useChatStore = create<ChatState>()(
   persist(
@@ -68,11 +71,11 @@ export const useChatStore = create<ChatState>()(
       deliveryCity: null,
       deliveryDate: null,
       isLoading: false,
-      sessionId: SESSION_ID,
+      sessionId: INITIAL_SESSION_ID,
       userMemory: {},
       ghostContext: null,
       userName: null,
-      mood: 'neutral' as Mood,
+      mood: 'neutral',
       smartSuggestions: [],
       voiceMode: false,
 
@@ -164,12 +167,12 @@ export const useChatStore = create<ChatState>()(
   newChat: () => set((state) => ({
     messages: [],
     isLoading: false,
-    mood: 'neutral' as Mood,
+    mood: 'neutral',
     smartSuggestions: [],
     deliveryCity: null,
     deliveryDate: null,
     giftMode: false,
-    sessionId: 'kasa-' + Math.random().toString(36).slice(2, 10),
+    sessionId: createSessionId(),
     // Preserve userName and userMemory across new chats
     userName: state.userName,
     userMemory: state.userMemory,
