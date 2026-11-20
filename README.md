@@ -4,15 +4,17 @@
 
 **කැස** · Emotionally intelligent, trilingual AI shopping concierge built on the Kapruka Model Context Protocol (MCP) for Sri Lanka's largest e-commerce platform.
 
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-kasa--theta.vercel.app-7C3AED?style=for-the-badge&logo=vercel&logoColor=white)](https://kasa-theta.vercel.app)
+
 [![Next.js](https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=next.js)](https://nextjs.org/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Vercel AI SDK](https://img.shields.io/badge/Vercel%20AI%20SDK-6-000000?style=flat-square&logo=vercel)](https://sdk.vercel.ai/)
 [![Kapruka MCP](https://img.shields.io/badge/Protocol-Kapruka%20MCP-6D28D9?style=flat-square)](https://mcp.kapruka.com)
-[![Kapruka Agent Challenge](https://img.shields.io/badge/Kapruka%20Agent%20Challenge%202026-Builder-F59E0B?style=flat-square)](#-recognition)
+[![Kapruka Agent Challenge](https://img.shields.io/badge/Kapruka%20Agent%20Challenge%202026-Builder-F59E0B?style=flat-square)](#-overview)
 [![License: MIT](https://img.shields.io/badge/License-MIT-10B981?style=flat-square)](LICENSE)
 
-[Architecture](#-system-architecture) · [Engineering Highlights](#-core-engineering-highlights) · [Getting Started](#-getting-started) · [API Reference](#-api-reference) · [Deployment](#-deployment)
+[Live Demo](https://kasa-theta.vercel.app) · [UI Showcase](#-ui-showcase) · [Architecture](#-system-architecture) · [Engineering Highlights](#-frontend--integration-engineering-highlights) · [Getting Started](#-getting-started) · [API Reference](#-api-reference)
 
 </div>
 
@@ -24,6 +26,32 @@
 
 > **Recognition — Kapruka Agent Challenge 2026**
 > Built and submitted as a live AI shopping agent on the Kapruka MCP for the **Kapruka Agent Challenge 2026** (700+ participating developers across Sri Lanka). Awarded the official **Builder Certificate of Participation** by Kapruka Holdings PLC (`REF · NHKZ4`, July 2026).
+
+---
+
+## UI Showcase
+
+### Conversational Product Discovery
+Real-time streaming responses with mood detection, live Kapruka MCP product search, dynamic pricing badges, stock verification, and contextual quick-reply actions.
+
+![KASA Chat Workspace and Live Product Discovery](docs/screenshots/chat-discovery.png)
+
+### Slide-Over Cart Drawer & Real-Time Telemetry Dashboard
+
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <strong>Cart Drawer & Checkout Flow</strong><br/>
+      Instant Zustand-backed cart mutations, live LKR subtotals, quantity controls, toast feedback, and conversational checkout handoff.<br/><br/>
+      <img src="docs/screenshots/cart-drawer.png" alt="KASA Cart Drawer" />
+    </td>
+    <td width="50%" valign="top">
+      <strong>MCP & Session Telemetry Dashboard</strong><br/>
+      Live observability into active sessions, message throughput, Kapruka MCP request latency, circuit breaker health, and mood distribution.<br/><br/>
+      <img src="docs/screenshots/telemetry-dashboard.png" alt="KASA Telemetry Dashboard" />
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -41,7 +69,7 @@ flowchart TB
     end
 
     subgraph Server["API and Security Layer — Next.js Route Handlers"]
-        RateLimit["Sliding-Window Rate Limiter<br/>and Input Sanitizer"]
+        RateLimit["Sliding-Window Rate Limiter<br/>Zod Validation and Sanitizer"]
         ChatAPI["POST /api/chat<br/>Streaming Orchestrator"]
         RestAPIs["REST Endpoints<br/>cart, delivery, order, suggestions, dashboard"]
         RateLimit -->|Validate Request| ChatAPI
@@ -61,7 +89,7 @@ flowchart TB
     end
 
     subgraph External["External Commerce Protocol"]
-        MCPClient["Kapruka MCP Client<br/>JSON-RPC 2.0, SSE, Exponential Backoff"]
+        MCPClient["Kapruka MCP Client<br/>JSON-RPC 2.0, SSE, Circuit Breaker"]
         KaprukaMCP["Kapruka MCP Server<br/>mcp.kapruka.com"]
         MCPClient -->|JSON RPC Over HTTPS| KaprukaMCP
     end
@@ -75,39 +103,46 @@ flowchart TB
     Parser -->|Text and UI Tags Stream| ChatUI
 ```
 
-### Conversational Request Flow
+### End-to-End Streaming & MCP Integration Sequence
 
 ```mermaid
 sequenceDiagram
     participant User as Shopper
-    participant UI as Chat UI
+    participant UI as Streaming UI
     participant API as POST /api/chat
-    participant AI as Intent and LLM Pipeline
-    participant MCP as Kapruka MCP Client
+    participant MCP as Kapruka MCP Server
+    participant Fallback as Fallback Engine
 
-    User->>UI: Send message in English, Sinhala, or Tanglish
-    UI->>API: POST message, sessionId, language, cart, deliveryCity
-    API->>API: Check rate limit and sanitize input
-    API->>AI: Extract emotion, shopping intent, and memory updates
-    AI-->>API: Structured intent with search queries and mood
-    API->>MCP: Call Kapruka MCP tools for search, delivery, or tracking
-    MCP-->>API: Product catalog, delivery status, or order payload
-    API->>AI: Rank products, update Ghost Cart, and stream LLM reply
-    AI-->>API: Token stream with structured UI tags
-    API-->>UI: Stream prose plus PRODUCTS, DELIVERY, and QUICK_REPLIES tags
-    UI-->>User: Render empathetic reply, product cards, and mood background
+    User->>UI: Enter shopping request in EN, SI, or Tanglish
+    UI->>UI: Abort prior stream via AbortController
+    UI->>API: POST JSON payload with sessionId, cart, language
+    API->>API: Enforce IP rate limit, Zod schema, and XSS sanitizer
+    alt LLM API Key Configured
+        API->>API: Extract emotional intent and update session memory
+        API->>MCP: JSON-RPC tools/call for search, delivery, or tracking
+        MCP-->>API: SSE or JSON product catalog and metadata
+        API->>API: Rank products, predict Ghost Cart, and stream LLM tokens
+        API-->>UI: Chunked text stream plus PRODUCTS, MOOD, and QUICK_REPLIES tags
+    else Zero-Key Fallback Mode
+        API->>Fallback: Route message to deterministic intent and commerce engine
+        Fallback->>MCP: Execute live Kapruka MCP search, city, or order tools
+        MCP-->>Fallback: Verified product catalog or delivery payload
+        Fallback-->>API: Structured reply with real Kapruka products and mood
+        API-->>UI: Abort-safe ReadableStream response with UI tags
+    end
+    UI->>UI: Incrementally parse tags and sync Zustand store
+    UI-->>User: Render live reply, product cards, cart actions, and ambient mood
 ```
 
 ---
 
-## Core Engineering Highlights
+## Frontend & Integration Engineering Highlights
 
-- **Multi-Provider LLM Routing with Zero-Key Fallback:** Dynamically resolves providers in priority order (**Groq Llama 3.3 70B** -> **Google Gemini 2.0 Flash** -> **OpenAI GPT-4o-mini**) via the Vercel AI SDK, and falls back seamlessly to a deterministic commerce engine when no API key is configured.
-- **Resilient Kapruka MCP Client:** Implements JSON-RPC 2.0 session initialization (`Mcp-Session-Id`), Server-Sent Events (SSE) stream parsing, `429 Retry-After` handling, exponential backoff retries, response verification, and real-time telemetry tracking.
-- **Emotion-Aware Commerce Pipeline:** Detects emotional context (`sad`, `urgent`, `excited`, `anxious`, `romantic`, `neutral`), adjusts visual mood backgrounds, enforces natural non-robotic tone, and prioritizes empathy before recommendations.
-- **Trilingual Localization:** Native UI strings and conversational responses across **English**, **Sinhala (සිංහල)**, and **Tanglish**, paired with Web Speech API voice input.
-- **Predictive Shopping UX:** Includes **KASA's Pick** product scoring, **Ghost Cart** pre-fetching for likely additions, **10-Second Decision** quick-pick mode, gift message cards, group-gift split links, and live conversation memory.
-- **Production Hardening:** Enforces strict CSP and security headers (`X-Frame-Options`, `X-Content-Type-Options`, `Permissions-Policy`), sliding-window IP rate limiting, XSS input sanitization, 1-hour TTL ephemeral server sessions, and standalone multi-stage Docker packaging.
+- **Strict End-to-End TypeScript & Runtime Schema Validation:** Built under TypeScript `strict: true` with zero unsafe `any` escapes across client views, Zustand stores, and route handlers. All Next.js API endpoints validate incoming JSON payloads at the boundary with **Zod 4** schemas (`ChatRequestSchema`, `CartSyncSchema`, `DeliveryCheckSchema`, `CreateOrderSchema`, `SuggestionsRequestSchema`).
+- **Incremental Streaming UX & `AbortController` Lifecycle:** Streams chunked responses from `/api/chat` into a fault-tolerant incremental tag parser (`<PRODUCTS>`, `<CATEGORIES>`, `<DELIVERY>`, `<ORDER>`, `<QUICK_REPLIES>`, `<MOOD>`, `<CHECKOUT_FORM/>`) while safely cancelling in-flight streams on new chat resets, overlapping requests, or component unmount — both client-side and server-side (`request.signal`).
+- **Modular Zustand State Architecture:** Separates ephemeral conversational state (messages, loading state, active cart, dynamic mood, smart suggestions) from selectively persisted shopper preferences (`userName`, `userMemory`) via Zustand `persist` + `partialize`, paired with code-split lazy loading (`next/dynamic`) for secondary commerce drawers and modals.
+- **Resilient Kapruka MCP Client & Zero-Key Fallback:** Implements a singleton JSON-RPC 2.0 client over HTTPS + Server-Sent Events (SSE) with session negotiation (`Mcp-Session-Id`), 12-second per-request `AbortController` timeouts, `429 Retry-After` + exponential backoff retries, response integrity verification, automatic circuit-breaker tripping/recovery, live `/api/dashboard` telemetry, and seamless fallback to a deterministic commerce engine when no LLM provider key is configured.
+- **Emotion-Aware, Trilingual UX & Production Hardening:** Supports **English**, **Sinhala (සිංහල)**, and **Tanglish** with Web Speech API voice input, emotion-reactive ambient backgrounds, sliding-window IP rate limiting, CSP + security headers, 1-hour TTL session eviction, and multi-stage standalone Docker builds.
 
 ---
 
@@ -132,16 +167,16 @@ sequenceDiagram
 kasa/
 ├── app/
 │   ├── api/
-│   │   ├── cart/sync/route.ts         # Cart synchronization and totals
+│   │   ├── cart/sync/route.ts         # Zod-validated cart synchronization & totals
 │   │   ├── chat/
-│   │   │   ├── route.ts               # Streaming AI + MCP orchestrator
+│   │   │   ├── route.ts               # Streaming AI + MCP orchestrator & fallback
 │   │   │   └── parsed/route.ts        # Parsed chat response helper
-│   │   ├── dashboard/route.ts         # Live session & MCP telemetry API
-│   │   ├── delivery/check/route.ts    # City/date delivery validation
-│   │   ├── order/create/route.ts      # Guest checkout order creation
-│   │   └── suggestions/route.ts       # Context-aware suggestions API
-│   ├── components/                    # 32 modular React UI components
-│   │   ├── CartDrawer.tsx             # Slide-over shopping cart
+│   │   ├── dashboard/route.ts         # Live session, Ghost Cart & MCP telemetry API
+│   │   ├── delivery/check/route.ts    # City/date delivery validation via MCP
+│   │   ├── order/create/route.ts      # Guest checkout order creation via MCP
+│   │   └── suggestions/route.ts       # Context-aware next-best-action suggestions
+│   ├── components/                    # 32 modular React 19 UI components
+│   │   ├── CartDrawer.tsx             # Slide-over shopping cart with toast feedback
 │   │   ├── CategoryGrid.tsx           # Interactive Kapruka categories
 │   │   ├── CheckoutForm.tsx           # Recipient & sender checkout flow
 │   │   ├── ComparisonTable.tsx        # Side-by-side product comparison
@@ -153,18 +188,20 @@ kasa/
 │   │   ├── VoiceInput.tsx             # Web Speech API microphone control
 │   │   └── WelcomeScreen.tsx          # Localized onboarding workspace
 │   ├── dashboard/
-│   │   ├── page.tsx                   # Real-time telemetry dashboard UI
+│   │   ├── page.tsx                   # Real-time telemetry & MCP health UI
 │   │   └── dashboard.css
 │   ├── lib/
 │   │   ├── ai/                        # Intent, memory, ranker, parser, ghost-cart, tone
 │   │   ├── i18n/translations.ts       # English, Sinhala, and Tanglish packs
 │   │   ├── mcp/                       # Kapruka MCP JSON-RPC/SSE client & types
 │   │   ├── security/rate-limiter.ts   # Sliding-window limiter & sanitizer
-│   │   └── store/chat-store.ts        # Zustand client store
+│   │   └── store/chat-store.ts        # Zustand client store with selective persist
 │   ├── globals.css
 │   ├── layout.tsx
 │   ├── loading.tsx
 │   └── page.tsx
+├── docs/
+│   └── screenshots/                   # High-resolution UI showcase captures
 ├── public/                            # PWA manifest, icons, service worker
 ├── .env.example                       # Environment template
 ├── Dockerfile                         # Multi-stage production container
@@ -201,7 +238,7 @@ npm install
 cp .env.example .env.local
 ```
 
-Edit `.env.local` with at least one AI provider key (or leave blank to run in zero-key smart fallback mode):
+Edit `.env.local` with at least one AI provider key (or leave blank to run in zero-key smart fallback mode with live Kapruka MCP search):
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -218,7 +255,8 @@ Edit `.env.local` with at least one AI provider key (or leave blank to run in ze
 # Run development server (http://localhost:3000)
 npm run dev
 
-# Verify lint and production build
+# Verify strict TypeScript, ESLint, and production build
+npx tsc --noEmit
 npm run lint
 npm run build
 
@@ -233,18 +271,18 @@ npm start
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/api/chat` | `POST` | Streaming conversational endpoint emitting prose + structured UI tags (`<PRODUCTS>`, `<CATEGORIES>`, `<DELIVERY>`, `<ORDER>`, `<TRACKING>`, `<QUICK_REPLIES>`, `<MOOD>`, `<CHECKOUT_FORM/>`) |
-| `/api/chat/parsed` | `POST` | Returns pre-parsed structured response payloads |
-| `/api/cart/sync` | `POST` | Synchronizes cart items and calculates totals |
-| `/api/delivery/check` | `POST` | Validates delivery coverage by Sri Lankan city and date |
-| `/api/order/create` | `POST` | Submits guest checkout orders via Kapruka MCP |
+| `/api/chat/parsed` | `GET` | Returns latest pre-parsed structured response payload for a session |
+| `/api/cart/sync` | `POST` | Zod-validated cart synchronization and subtotal computation |
+| `/api/delivery/check` | `POST` | Validates delivery coverage by Sri Lankan city and date via MCP |
+| `/api/order/create` | `POST` | Submits Zod-validated guest checkout orders via Kapruka MCP |
 | `/api/suggestions` | `POST` | Generates contextual next-best-action shopping prompts |
-| `/api/dashboard` | `GET` | Exposes active session, mood distribution, Ghost Cart, and MCP telemetry |
+| `/api/dashboard` | `GET` | Exposes active sessions, mood distribution, Ghost Cart, and MCP circuit-breaker telemetry |
 
 ---
 
 ## Deployment
 
-KASA supports one-click cloud hosting and containerized self-hosting. See [DEPLOYMENT.md](DEPLOYMENT.md) for platform-specific instructions covering Docker, Vercel, Netlify, Railway, Render, AWS ECS, and Nginx + PM2.
+KASA is live at **[kasa-theta.vercel.app](https://kasa-theta.vercel.app)** and supports one-click cloud hosting as well as containerized self-hosting. See [DEPLOYMENT.md](DEPLOYMENT.md) for platform-specific guides covering Docker, Vercel, Netlify, Railway, Render, AWS ECS, and Nginx + PM2.
 
 ### Quick Deploy to Vercel
 
